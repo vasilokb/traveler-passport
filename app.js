@@ -75,6 +75,7 @@ const STORAGE_KEY = "travelerPassport";
 let state = {
   currentTab: "catalog",
   travelerName: "Белорусский путешественник",
+  onboardingComplete: false,
   visitedCities: {},
 };
 
@@ -85,12 +86,14 @@ function loadState() {
       const saved = JSON.parse(raw);
       state.currentTab = saved.currentTab || "catalog";
       state.travelerName = saved.travelerName || "Белорусский путешественник";
+      state.onboardingComplete = !!saved.onboardingComplete;
       state.visitedCities = saved.visitedCities || {};
     }
   } catch (e) {
     state = {
       currentTab: "catalog",
       travelerName: "Белорусский путешественник",
+      onboardingComplete: false,
       visitedCities: {},
     };
   }
@@ -118,6 +121,10 @@ function switchTab(tabId) {
 
   if (tabId === "catalog") {
     renderCatalog();
+  }
+
+  if (tabId === "profile") {
+    renderProfile();
   }
 }
 
@@ -177,6 +184,174 @@ function handleCatalogClick(e) {
   renderCatalog();
 }
 
+function showOnboarding() {
+  document.getElementById("onboarding-overlay").classList.add("visible");
+}
+
+function hideOnboarding() {
+  document.getElementById("onboarding-overlay").classList.remove("visible");
+}
+
+function handleOnboardingContinue() {
+  var input = document.getElementById("onboarding-name-input");
+  var name = input.value.trim();
+  state.travelerName = name || "Белорусский путешественник";
+  state.onboardingComplete = true;
+  saveState();
+  hideOnboarding();
+}
+
+function handleOnboardingSkip() {
+  state.travelerName = "Белорусский путешественник";
+  state.onboardingComplete = true;
+  saveState();
+  hideOnboarding();
+}
+
+function formatDateDisplay(dateStr) {
+  var parts = dateStr.split("-");
+  return parts[2] + "." + parts[1] + "." + parts[0];
+}
+
+function renderProfile() {
+  var container = document.getElementById("tab-profile");
+  var visitedIds = Object.keys(state.visitedCities);
+  var totalVisited = visitedIds.length;
+  var totalCities = CITIES.length;
+
+  var html = "";
+
+  html += '<div class="profile-section">';
+  html += '  <div id="profile-name-display" class="profile-name-block">';
+  html += '    <span class="profile-name-text' + (state.travelerName === "Белорусский путешественник" ? " is-default" : "") + '">' + escapeHtml(state.travelerName) + '</span>';
+  html += '    <button class="profile-name-edit-btn" id="profile-edit-btn">';
+  html += '      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+  html += '    </button>';
+  html += '  </div>';
+  html += '  <div id="profile-name-edit" class="profile-edit-row" style="display:none">';
+  html += '    <input type="text" id="profile-name-input" class="profile-name-input" maxlength="50">';
+  html += '    <div class="profile-edit-actions">';
+  html += '      <button class="profile-save-btn" id="profile-save-btn">Сохранить</button>';
+  html += '      <button class="profile-cancel-btn" id="profile-cancel-btn">Отмена</button>';
+  html += '    </div>';
+  html += '  </div>';
+  html += '</div>';
+
+  html += '<div class="profile-divider"></div>';
+
+  html += '<div class="profile-section">';
+  html += '  <div class="profile-stat-title">Общая статистика</div>';
+  html += '  <div class="profile-stat-total">';
+  html += '    <span class="profile-stat-number">' + totalVisited + '</span>';
+  html += '    <span class="profile-stat-label">из ' + totalCities + '</span>';
+  html += '  </div>';
+  var totalPct = totalCities > 0 ? (totalVisited / totalCities * 100) : 0;
+  html += '  <div class="progress-bar-track">';
+  html += '    <div class="progress-bar-fill" style="width:' + totalPct + '%;background:#27AE60"></div>';
+  html += '  </div>';
+  html += '</div>';
+
+  html += '<div class="profile-divider"></div>';
+
+  html += '<div class="profile-section">';
+  html += '  <div class="profile-stat-title">Прогресс по регионам</div>';
+  REGIONS.forEach(function (region) {
+    var citiesInRegion = CITIES.filter(function (c) { return c.region === region.id; });
+    var regionTotal = citiesInRegion.length;
+    var regionVisited = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; }).length;
+    var regionPct = regionTotal > 0 ? (regionVisited / regionTotal * 100) : 0;
+    html += '<div class="region-progress-item">';
+    html += '  <div class="region-progress-header">';
+    html += '    <span class="region-progress-name">' + region.name + '</span>';
+    html += '    <span class="region-progress-count">' + regionVisited + ' из ' + regionTotal + '</span>';
+    html += '  </div>';
+    html += '  <div class="progress-bar-track">';
+    html += '    <div class="progress-bar-fill" style="width:' + regionPct + '%;background:' + region.color + '"></div>';
+    html += '  </div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="profile-divider"></div>';
+
+  html += '<div class="profile-section">';
+  html += '  <div class="chronicle-title">Хроника посещений</div>';
+  if (totalVisited === 0) {
+    html += '  <p class="chronicle-empty">Вы пока не посетили ни одного города. Отправляйтесь в путь!</p>';
+  } else {
+    var chronicleItems = [];
+    visitedIds.forEach(function (cityId) {
+      var city = CITIES.find(function (c) { return c.id === cityId; });
+      if (city && state.visitedCities[cityId] && state.visitedCities[cityId].date) {
+        chronicleItems.push({ name: city.name, date: state.visitedCities[cityId].date });
+      }
+    });
+    chronicleItems.sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return a.name.localeCompare(b.name, "ru");
+    });
+    html += '  <ul class="chronicle-list">';
+    chronicleItems.forEach(function (item) {
+      html += '<li class="chronicle-item">';
+      html += '  <span class="chronicle-city">' + escapeHtml(item.name) + '</span>';
+      html += '  <span class="chronicle-date">' + formatDateDisplay(item.date) + '</span>';
+      html += '</li>';
+    });
+    html += '  </ul>';
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+
+  var editBtn = document.getElementById("profile-edit-btn");
+  if (editBtn) editBtn.addEventListener("click", startEditName);
+
+  var saveBtn = document.getElementById("profile-save-btn");
+  if (saveBtn) saveBtn.addEventListener("click", saveEditName);
+
+  var cancelBtn = document.getElementById("profile-cancel-btn");
+  if (cancelBtn) cancelBtn.addEventListener("click", cancelEditName);
+
+  var nameInput = document.getElementById("profile-name-input");
+  if (nameInput) {
+    nameInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") saveEditName();
+      if (e.key === "Escape") cancelEditName();
+    });
+  }
+}
+
+function escapeHtml(str) {
+  var div = document.createElement("div");
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function startEditName() {
+  var displayEl = document.getElementById("profile-name-display");
+  var editEl = document.getElementById("profile-name-edit");
+  var input = document.getElementById("profile-name-input");
+  if (!displayEl || !editEl || !input) return;
+  input.value = state.travelerName;
+  displayEl.style.display = "none";
+  editEl.style.display = "flex";
+  input.focus();
+  input.select();
+}
+
+function saveEditName() {
+  var input = document.getElementById("profile-name-input");
+  if (!input) return;
+  var name = input.value.trim();
+  state.travelerName = name || "Белорусский путешественник";
+  saveState();
+  renderProfile();
+}
+
+function cancelEditName() {
+  renderProfile();
+}
+
 function init() {
   loadState();
 
@@ -190,7 +365,25 @@ function init() {
   var catalogList = document.getElementById("catalog-list");
   catalogList.addEventListener("click", handleCatalogClick);
 
+  var continueBtn = document.getElementById("onboarding-continue");
+  if (continueBtn) continueBtn.addEventListener("click", handleOnboardingContinue);
+
+  var skipBtn = document.getElementById("onboarding-skip");
+  if (skipBtn) skipBtn.addEventListener("click", handleOnboardingSkip);
+
+  var onboardingInput = document.getElementById("onboarding-name-input");
+  if (onboardingInput) {
+    onboardingInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") handleOnboardingContinue();
+    });
+  }
+
   renderCatalog();
+
+  if (!state.onboardingComplete) {
+    showOnboarding();
+  }
+
   switchTab(state.currentTab);
 }
 

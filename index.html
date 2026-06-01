@@ -7,6 +7,18 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="onboarding-overlay">
+    <div class="onboarding-content">
+      <h1 class="onboarding-title">Добро пожаловать в Паспорт путешественника!</h1>
+      <p class="onboarding-subtitle">Отмечайте города Беларуси, которые вы посетили</p>
+      <input type="text" id="onboarding-name-input" class="onboarding-input" placeholder="Ваше имя" maxlength="50" autocomplete="off">
+      <div class="onboarding-buttons">
+        <button id="onboarding-continue" class="onboarding-btn onboarding-btn-primary">Продолжить</button>
+        <button id="onboarding-skip" class="onboarding-btn onboarding-btn-secondary">Пропустить</button>
+      </div>
+    </div>
+  </div>
+
   <div id="app">
     <div id="tab-passport" class="tab-content">
       <div class="placeholder">
@@ -27,11 +39,7 @@
       </div>
     </div>
 
-    <div id="tab-profile" class="tab-content">
-      <div class="placeholder">
-        <p>Профиль (скоро)</p>
-      </div>
-    </div>
+    <div id="tab-profile" class="tab-content"></div>
 
     <nav id="tab-bar">
       <button class="tab-btn" data-tab="passport">
