@@ -96,6 +96,8 @@ let state = {
   onboardingComplete: false,
   visitedCities: {},
   openedRegions: [],
+  activeOverlayCityId: null,
+  stampOrigin: null,
 };
 
 function loadState() {
@@ -197,15 +199,7 @@ function handleCatalogClick(e) {
   if (!item) return;
   var cityId = item.dataset.cityId;
   if (!cityId) return;
-
-  if (state.visitedCities[cityId]) {
-    delete state.visitedCities[cityId];
-  } else {
-    state.visitedCities[cityId] = { date: getTodayLocal() };
-  }
-
-  saveState();
-  renderCatalog();
+  openCityCard(cityId);
 }
 
 function renderPassport() {
@@ -285,7 +279,7 @@ function handlePassportClick(e) {
   if (cell) {
     var cityId = cell.dataset.cityId;
     if (cityId) {
-      console.log("stamp tap:", cityId);
+      openCityCard(cityId);
     }
   }
 }
@@ -458,6 +452,119 @@ function cancelEditName() {
   renderProfile();
 }
 
+function openCityCard(cityId) {
+  var city = CITIES.find(function (c) { return c.id === cityId; });
+  if (!city) return;
+
+  var originMap = { catalog: "catalog", passport: "passport", map: "map" };
+  state.stampOrigin = originMap[state.currentTab] || state.currentTab;
+  state.activeOverlayCityId = cityId;
+
+  renderCityCard(cityId);
+
+  document.getElementById("city-card-overlay").style.display = "flex";
+  document.getElementById("tab-bar").classList.add("tab-bar-blocked");
+}
+
+function closeCityCard() {
+  state.activeOverlayCityId = null;
+  state.stampOrigin = null;
+
+  document.getElementById("city-card-overlay").style.display = "none";
+  document.getElementById("tab-bar").classList.remove("tab-bar-blocked");
+}
+
+function renderCityCard(cityId) {
+  var city = CITIES.find(function (c) { return c.id === cityId; });
+  if (!city) return;
+
+  var region = REGIONS.find(function (r) { return r.id === city.region; });
+  var regionName = region ? region.name : "";
+  var regionColor = region ? region.color : "#ccc";
+  var isVisited = !!state.visitedCities[cityId];
+
+  var html = "";
+  html += '<div class="city-card">';
+  html += '  <button class="city-card-close" id="city-card-close-btn">&times;</button>';
+  html += '  <h2 class="city-card-name">' + escapeHtml(city.name) + '</h2>';
+  html += '  <p class="city-card-region">' + escapeHtml(regionName) + '</p>';
+
+  html += '  <div class="city-card-stamp' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + regionColor + ';color:' + regionColor : 'color:#ccc') + '">';
+  html += createStampSVG(city.region);
+  html += '  </div>';
+
+  html += '  <p class="city-card-description">' + escapeHtml(city.description) + '</p>';
+
+  if (isVisited) {
+    var visit = state.visitedCities[cityId];
+    html += '  <p class="city-card-date">Дата визита: <span>' + formatDateDisplay(visit.date) + '</span></p>';
+    html += '  <button class="city-card-btn city-card-btn-danger" id="city-card-remove-btn">Удалить отметку</button>';
+  } else {
+    html += '  <button class="city-card-btn city-card-btn-primary" id="city-card-visit-btn">Я здесь был</button>';
+  }
+
+  html += '</div>';
+
+  document.getElementById("city-card-content").innerHTML = html;
+
+  var closeBtn = document.getElementById("city-card-close-btn");
+  if (closeBtn) closeBtn.addEventListener("click", closeCityCard);
+
+  if (isVisited) {
+    var removeBtn = document.getElementById("city-card-remove-btn");
+    if (removeBtn) removeBtn.addEventListener("click", function () { removeVisit(cityId); });
+  } else {
+    var visitBtn = document.getElementById("city-card-visit-btn");
+    if (visitBtn) visitBtn.addEventListener("click", function () { openDatePicker(cityId); });
+  }
+}
+
+function openDatePicker(cityId) {
+  var city = CITIES.find(function (c) { return c.id === cityId; });
+  if (!city) return;
+
+  var today = new Date().toLocaleDateString("sv-SE");
+
+  var html = "";
+  html += '<div class="date-picker-card">';
+  html += '  <p class="date-picker-title">Когда вы посетили ' + escapeHtml(city.name) + '?</p>';
+  html += '  <input type="date" class="date-picker-input" id="date-picker-input" max="' + today + '" value="' + today + '">';
+  html += '  <div class="date-picker-actions">';
+  html += '    <button class="date-picker-cancel" id="date-picker-cancel-btn">Отмена</button>';
+  html += '    <button class="date-picker-confirm" id="date-picker-confirm-btn">Подтвердить</button>';
+  html += '  </div>';
+  html += '</div>';
+
+  document.getElementById("date-picker-content").innerHTML = html;
+  document.getElementById("date-picker-modal").style.display = "flex";
+
+  document.getElementById("date-picker-cancel-btn").addEventListener("click", closeDatePicker);
+  document.getElementById("date-picker-confirm-btn").addEventListener("click", function () {
+    var input = document.getElementById("date-picker-input");
+    var selectedDate = input.value;
+    if (!selectedDate) return;
+    confirmVisit(cityId, selectedDate);
+  });
+}
+
+function closeDatePicker() {
+  document.getElementById("date-picker-modal").style.display = "none";
+}
+
+function confirmVisit(cityId, date) {
+  state.visitedCities[cityId] = { date: date };
+  saveState();
+  closeDatePicker();
+  closeCityCard();
+  console.log("Штамп получен:", cityId);
+}
+
+function removeVisit(cityId) {
+  delete state.visitedCities[cityId];
+  saveState();
+  closeCityCard();
+}
+
 function init() {
   loadState();
 
@@ -486,6 +593,14 @@ function init() {
       if (e.key === "Enter") handleOnboardingContinue();
     });
   }
+
+  document.getElementById("city-card-overlay").addEventListener("click", function (e) {
+    if (e.target === e.currentTarget) closeCityCard();
+  });
+
+  document.getElementById("date-picker-modal").addEventListener("click", function (e) {
+    if (e.target === e.currentTarget) closeDatePicker();
+  });
 
   renderCatalog();
 
