@@ -10,6 +10,24 @@ const REGIONS = [
   { id: "gomel", name: "Гомельская", color: "#1ABC9C" },
 ];
 
+const REGION_ICONS = {
+  minsk: '<path d="M48 38 L50 32 L52 26 L54 24 L46 24 L48 26 L50 32 L50 38 L42 38 L42 40 L58 40 L58 38 Z M46 22 L54 22 L54 24 L46 24 Z" fill="currentColor"/>',
+  minsk_obl: '<path d="M40 40 L40 28 L42 26 L46 24 L50 26 L54 24 L58 26 L60 28 L60 40 Z M48 30 L48 36 M44 33 L52 33" fill="currentColor"/>',
+  brest: '<path d="M38 40 L38 26 L42 22 L44 22 L44 26 L46 26 L46 22 L54 22 L54 26 L56 26 L56 22 L58 22 L62 26 L62 40 Z M50 28 L50 36 M46 32 L54 32" fill="currentColor"/>',
+  grodno: '<path d="M44 40 L44 30 L42 28 L42 22 L46 22 L46 28 L50 28 L50 22 L54 22 L54 28 L52 30 L52 40 Z M48 32 L48 38" fill="currentColor"/>',
+  vitebsk: '<path d="M42 40 L42 30 L38 26 L40 22 L44 20 L46 22 L46 18 L48 16 L50 18 L50 22 L52 20 L56 22 L58 26 L54 30 L54 40 Z M48 24 L48 36" fill="currentColor"/>',
+  mogilev: '<path d="M42 40 L42 32 L44 30 L44 26 L40 24 L40 22 L46 22 L46 24 L50 24 L50 22 L56 22 L56 24 L52 26 L52 30 L54 32 L54 40 Z M48 34 L48 38" fill="currentColor"/>',
+  gomel: '<path d="M38 40 L38 30 L40 28 L40 24 L42 22 L44 22 L44 24 L48 24 L48 22 L52 22 L52 24 L56 24 L56 22 L58 22 L60 24 L60 28 L62 30 L62 40 Z M50 26 L50 36" fill="currentColor"/>',
+};
+
+function createStampSVG(regionId) {
+  var inner = REGION_ICONS[regionId] || "";
+  return '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M50 5 L54 8 L58 6 L61 10 L65 9 L67 13 L71 13 L72 17 L76 18 L76 22 L80 24 L79 28 L82 31 L80 35 L83 38 L80 41 L82 44 L79 47 L80 50 L77 53 L78 56 L74 58 L74 62 L70 63 L69 67 L65 67 L63 71 L59 70 L57 74 L53 72 L50 75 L47 72 L43 74 L41 70 L37 71 L35 67 L31 67 L30 63 L26 62 L26 58 L22 56 L23 53 L20 50 L21 47 L18 44 L20 41 L17 38 L20 35 L18 31 L21 28 L20 24 L24 22 L24 18 L28 17 L29 13 L33 13 L35 9 L39 10 L42 6 L46 8 Z" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.5"/>' +
+    '<g transform="translate(0, 5) scale(1)">' + inner + '</g>' +
+    '</svg>';
+}
+
 const CITIES = [
   { id: "minsk", name: "Минск", region: "minsk", lat: 53.9006, lon: 27.5590, description: "Столица Беларуси с монументальной сталинской архитектурой проспекта Независимости, Троицким предместьем и одним из старейших университетов Восточной Европы." },
   { id: "nesvizh", name: "Несвиж", region: "minsk_obl", lat: 53.2227, lon: 26.6753, description: "Жемчужина белорусской архитектуры — дворцово-парковый комплекс Радзивиллов и костёл Божьего Тела, занесённые в список ЮНЕСКО." },
@@ -77,6 +95,7 @@ let state = {
   travelerName: "Белорусский путешественник",
   onboardingComplete: false,
   visitedCities: {},
+  openedRegions: [],
 };
 
 function loadState() {
@@ -95,6 +114,7 @@ function loadState() {
       travelerName: "Белорусский путешественник",
       onboardingComplete: false,
       visitedCities: {},
+      openedRegions: [],
     };
   }
 }
@@ -121,6 +141,10 @@ function switchTab(tabId) {
 
   if (tabId === "catalog") {
     renderCatalog();
+  }
+
+  if (tabId === "passport") {
+    renderPassport();
   }
 
   if (tabId === "profile") {
@@ -182,6 +206,88 @@ function handleCatalogClick(e) {
 
   saveState();
   renderCatalog();
+}
+
+function renderPassport() {
+  var container = document.getElementById("passport-list");
+  var totalVisited = Object.keys(state.visitedCities).length;
+
+  var countEl = document.getElementById("passport-count");
+  if (countEl) countEl.textContent = totalVisited + " из " + CITIES.length;
+
+  var html = "";
+
+  REGIONS.forEach(function (region) {
+    var citiesInRegion = CITIES.filter(function (c) { return c.region === region.id; });
+    var regionTotal = citiesInRegion.length;
+    var regionVisited = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; }).length;
+    var isComplete = regionTotal > 0 && regionVisited === regionTotal;
+    var isOpen = state.openedRegions.indexOf(region.id) !== -1;
+
+    html += '<div class="accordion-item' + (isOpen ? ' open' : '') + '" data-region-id="' + region.id + '">';
+    html += '  <div class="accordion-header">';
+    html += '    <span class="accordion-color-dot" style="background:' + region.color + '"></span>';
+    html += '    <span class="accordion-region-name">' + region.name + '</span>';
+
+    if (isComplete) {
+      if (region.id === "minsk") {
+        html += '    <span class="accordion-badge badge-silver">Старт</span>';
+      } else {
+        html += '    <span class="accordion-badge badge-gold">Пройден</span>';
+      }
+    }
+
+    html += '    <span class="accordion-count">' + regionVisited + ' из ' + regionTotal + '</span>';
+    html += '    <svg class="accordion-arrow" viewBox="0 0 20 20" fill="currentColor"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>';
+    html += '  </div>';
+    html += '  <div class="accordion-body">';
+    html += '    <div class="accordion-inner">';
+    html += '      <div class="stamps-grid">';
+
+    citiesInRegion.forEach(function (city) {
+      var isVisited = !!state.visitedCities[city.id];
+      html += '<div class="stamp-cell' + (isVisited ? ' visited' : '') + '" data-city-id="' + city.id + '">';
+      html += '  <div class="stamp-icon' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + region.color + ';color:' + region.color : '') + '">';
+      html += createStampSVG(region.id);
+      html += '  </div>';
+      html += '  <span class="stamp-name">' + escapeHtml(city.name) + '</span>';
+      html += '</div>';
+    });
+
+    html += '      </div>';
+    html += '    </div>';
+    html += '  </div>';
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+function handlePassportClick(e) {
+  var header = e.target.closest(".accordion-header");
+  if (header) {
+    var item = header.closest(".accordion-item");
+    if (!item) return;
+    var regionId = item.dataset.regionId;
+    if (!regionId) return;
+
+    var idx = state.openedRegions.indexOf(regionId);
+    if (idx !== -1) {
+      state.openedRegions.splice(idx, 1);
+    } else {
+      state.openedRegions.push(regionId);
+    }
+    item.classList.toggle("open");
+    return;
+  }
+
+  var cell = e.target.closest(".stamp-cell");
+  if (cell) {
+    var cityId = cell.dataset.cityId;
+    if (cityId) {
+      console.log("stamp tap:", cityId);
+    }
+  }
 }
 
 function showOnboarding() {
@@ -364,6 +470,9 @@ function init() {
 
   var catalogList = document.getElementById("catalog-list");
   catalogList.addEventListener("click", handleCatalogClick);
+
+  var passportList = document.getElementById("passport-list");
+  if (passportList) passportList.addEventListener("click", handlePassportClick);
 
   var continueBtn = document.getElementById("onboarding-continue");
   if (continueBtn) continueBtn.addEventListener("click", handleOnboardingContinue);
