@@ -6,6 +6,26 @@
 
 ⚠️ **ЖЁСТКОЕ ТРЕБОВАНИЕ:** При обновлении файла `app.js` **запрещено удалять, сокращать или заменять заглушками** массив `CITIES` (57 городов) и массив `REGIONS` (7 регионов).
 
+⚠️ **ЗАПРЕТ НА НОВЫЕ ЗАВИСИМОСТИ:** Не добавляй npm-пакеты, внешние библиотеки или CDN-ссылки. Проект — 3 файла (`index.html`, `style.css`, `app.js`) + `sw.js` + `manifest.json`. Всё остальное — vanilla JS.
+
+---
+
+## 0. АРХИТЕКТУРНЫЕ ПРАВИЛА (сохранить из предыдущих этапов)
+
+Этот этап модифицирует `app.js`, `style.css` и `index.html`. При любых изменениях **не нарушай** архитектуру, выстроенную на Этапах 1–5:
+
+### 0.1. Делегирование событий — не ломай
+Все обработчики кликов — через делегирование на родительских контейнерах (`.catalog-controls`, `.map-controls`, `#map-container`, `#catalog-list`). Не добавляй индивидуальные `addEventListener` на кнопки, точки или строки. Поиск — debounce 300мс через `setTimeout`/`clearTimeout`, debounce **только** на `input`-событии `#catalog-search`, не на кликах по фильтрам.
+
+### 0.2. Ephemeral-поля — не сохраняй
+`state.catalogFilter`, `state.catalogSearchQuery`, `state.mapFilter`, `state.stampOverlayCityId`, `state.openedRegions` — **ephemeral**, не появляются в `saveState()`. При добавлении валидации в `loadState()` не добавляй эти поля в сериализуемый объект.
+
+### 0.3. `renderCatalog()` — только `#catalog-list`
+Функция `renderCatalog()` обновляет **только** `#catalog-list`. Инпут и кнопки фильтров — статичный HTML. Не перерендеривай контролы.
+
+### 0.4. `fill="transparent"` на хитбоксах карты
+Невидимые хитбоксы точек карты — `fill="transparent"`, **не `fill="none"`**. Не меняй это при полировке.
+
 ---
 
 ## Структура этапа
@@ -19,13 +39,18 @@
 
 ## Часть 1. Edge cases — защита
 
+### Что УЖЕ реализовано (не дублируй)
+- `saveState()` уже обёрнут в `try/catch` — **дополни** его показом тоста при ошибке: `showToast('Не удалось сохранить данные...')`.
+- `loadState()` уже обёрнут в `try/catch` — **дополни** валидацией (см. 1.4).
+- `renderCityCard()` и `renderProfile()` используют индивидуальные `addEventListener` на динамически созданные элементы — **это нормально** для innerHTML-паттерна, не переписывай на делегирование.
+
 ### 1.1. Сброс localStorage браузером
 
 Браузер на мобильных устройствах может очистить localStorage при нехватке памяти (особенно на iOS Safari в режиме Private Browsing — `quota exceeded`).
 
 **Защита:**
-- Оберни все вызовы `localStorage.setItem()` в `try/catch`. Если выброшено исключение `QuotaExceededError` или любое другое — показать пользователю тост-предупреждение: *«Не удалось сохранить данные. Освободите место в браузере.»*
-- Оберни `localStorage.getItem()` в `try/catch`. Если данные повреждены (невалидный JSON) — инициализировать `state` дефолтными значениями, не крашить приложение.
+- В существующем `try/catch` в `saveState()` — **добавь** `showToast('Не удалось сохранить данные. Освободите место в браузере.')` в блок `catch`. Не создавай новый try/catch — расширь существующий.
+- В существующем `try/catch` в `loadState()` — **добавь** валидацию данных после `JSON.parse` (см. 1.4).
 
 ### 1.2. Экстремально длинное имя путешественника
 
@@ -61,8 +86,20 @@
 **Защита:**
 - Добавь флаг `let isProcessing = false;` (глобальная переменная).
 - Устанавливай `true` в начале `openCityCard()`, `confirmVisit()`, `removeVisit()`.
-- Сбрасывай `false` после завершения операции.
+- Сбрасывай `false` в блоке `finally` — **не в обычном потоке**, иначе при исключении флаг останется `true` навсегда и заблокирует приложение:
+```js
+async function openCityCard(cityId) {
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    // ... основная логика ...
+  } finally {
+    isProcessing = false;
+  }
+}
+```
 - Если флаг `true` при входе в функцию — `return` (игнорировать тап).
+- **⚠️ Важно:** Если операция включает CSS-анимацию или смену экранов (например, закрытие карточки с переходом 300мс, экран штампа с анимацией 400мс), JS-функция отработает за 1мс, сбросит `isProcessing = false`, и пользователь успеет совершить двойной тап пока элемент визуально исчезает. В таких случаях сбрасывай флаг **после** завершения анимации — через `setTimeout(400)` в блоке `finally`, не мгновенно.
 
 ### 1.6. Поиск в Каталоге с нестандартными символами
 
@@ -160,26 +197,29 @@
   "theme_color": "#2c3e50",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "icon-192.svg",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/svg+xml"
     },
     {
-      "src": "icon-512.png",
+      "src": "icon-512.svg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml"
     }
   ]
 }
 ```
 
-**Иконки:** сгенерируй простые PNG-иконки (192×192 и 512×512). Для MVP достаточно минималистичного логотипа — силуэт карты Беларуси или штамп на однотонном фоне. Если нет возможности сгенерировать PNG — создай SVG-иконку и используй её.
+**Иконки:** для MVP создай два SVG-файла `icon-192.svg` и `icon-512.svg` (одинаковый контент, разные размеры в `<svg width/height>`). Минималистичный логотип — круг с силуэтом штампа или флагом. В `manifest.json` укажи `"type": "image/svg+xml"`. PNG не нужен — SVG поддерживается всеми современными браузерами для PWA-иконок. Если модель не может сгенерировать SVG — создай простой круг с текстом «BY» на цветном фоне.
 
 Добавь в `<head>` в `index.html`:
 ```html
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.svg">
 <meta name="theme-color" content="#2c3e50">
 ```
+
+**`apple-touch-icon`** обязателен — iOS Safari при добавлении на «Домой» игнорирует SVG-иконки из `manifest.json` и без этого тега покажет скриншот экрана вместо иконки.
 
 ### 3.2. Service Worker (`sw.js`)
 
@@ -193,6 +233,8 @@ const ASSETS = [
   '/style.css',
   '/app.js',
   '/manifest.json',
+  '/icon-192.svg',
+  '/icon-512.svg',
 ];
 
 self.addEventListener('install', (event) => {
@@ -220,14 +262,16 @@ self.addEventListener('activate', (event) => {
 });
 ```
 
-Регистрация в `index.html` (в конце `<body>`, перед `</body>`):
+Регистрация в `index.html` (в конце `<body>`, **после** `<script src="app.js"></script>`):
 ```html
+<script src="app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
   }
 </script>
 ```
+Порядок критичен: `app.js` должен загрузиться и выполнить `initApp()` **до** регистрации SW. Inline-скрипт SW-регистрации — **последний элемент** в `<body>`.
 
 **⚠️ Важно:** PWA требует HTTPS. При локальной разработке через `localhost` Service Worker работает без HTTPS. Для продакшена — деплой на Vercel, Netlify или GitHub Pages (HTTPS по умолчанию).
 
@@ -256,7 +300,16 @@ html {
 ```
 
 ### 4.4. Prevent pull-to-refresh
-На мобильных браузерах pull-to-refresh может мешать скроллу. Добавь `overscroll-behavior-y: contain;` на главный контейнер.
+На мобильных браузерах pull-to-refresh может мешать свайпам. Но `overscroll-behavior-y: contain` на `body` ломает аппаратный скролл на iOS Safari (резиновый скролл пропадает, длинные списки тормозят). **Не ставь на `body`.**
+
+Вместо этого добавь `overscroll-behavior-y: contain;` только для фиксированных оверлеев, где pull-to-refresh реально мешает:
+```css
+#city-card-overlay,
+#stamp-overlay,
+#date-picker-modal {
+  overscroll-behavior-y: contain;
+}
+```
 
 ---
 
@@ -281,3 +334,13 @@ html {
 
 **Массивы данных:**
 12. [ ] `CITIES` (57) и `REGIONS` (7) в `app.js` — в полном и неизменном виде.
+
+---
+
+## ПРИМЕЧАНИЯ К ДЕПЛОЮ (не для реализации, для справки)
+
+### A. iOS `apple-touch-icon` и SVG
+Apple традиционно плохо поддерживает SVG в `<link rel="apple-touch-icon">`. На большинстве современных iOS (16+) это работает, но на старых версиях возможен чёрный квадрат. Если после тестирования на реальном iPhone иконка битая — замени `icon-192.svg` на PNG-версию в этом теге (оставив SVG в `manifest.json` для Android).
+
+### B. Пути в `sw.js` при деплое в подпапку
+Массив `ASSETS` использует абсолютные пути от корня (`/index.html`). Это работает на Vercel, Netlify, собственном домене. Но при деплое в подпапку (например `username.github.io/traveler-passport/`) — Service Worker получит 404. Решение: заменить `/` на `'./'`, `'/index.html'` на `'index.html'` и т.д. Если деплой на корневой домен — ничего менять не нужно.

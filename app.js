@@ -412,9 +412,33 @@ function loadState() {
     if (raw) {
       const saved = JSON.parse(raw);
       state.currentTab = saved.currentTab || "catalog";
-      state.travelerName = saved.travelerName || "Белорусский путешественник";
+      if (typeof saved.travelerName === "string" && saved.travelerName.trim()) {
+        state.travelerName = saved.travelerName;
+      } else {
+        state.travelerName = "Белорусский путешественник";
+      }
       state.onboardingComplete = !!saved.onboardingComplete;
-      state.visitedCities = saved.visitedCities || {};
+      if (saved.visitedCities && typeof saved.visitedCities === "object" && !Array.isArray(saved.visitedCities)) {
+        var validCities = {};
+        var dateRe = /^\d{4}-\d{2}-\d{2}$/;
+        var cityIds = Object.keys(saved.visitedCities);
+        for (var i = 0; i < cityIds.length; i++) {
+          var cid = cityIds[i];
+          var entry = saved.visitedCities[cid];
+          if (!entry || typeof entry !== "object") continue;
+          if (typeof entry.date !== "string" || !dateRe.test(entry.date)) continue;
+          if (!CITIES.find(function (c) { return c.id === cid; })) continue;
+          validCities[cid] = entry;
+        }
+        state.visitedCities = validCities;
+      } else {
+        state.visitedCities = {};
+      }
+      var needsFix = (typeof saved.travelerName !== "string") ||
+        (saved.visitedCities && (typeof saved.visitedCities !== "object" || Array.isArray(saved.visitedCities)));
+      if (needsFix) {
+        saveState();
+      }
     }
   } catch (e) {
     state = {
@@ -441,7 +465,9 @@ function saveState() {
       visitedCities: state.visitedCities,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-  } catch (e) {}
+  } catch (e) {
+    showToast('Не удалось сохранить данные. Освободите место в браузере.');
+  }
 }
 
 function switchTab(tabId) {
@@ -807,18 +833,26 @@ function cancelEditName() {
   renderProfile();
 }
 
+let isProcessing = false;
+
 function openCityCard(cityId) {
-  var city = CITIES.find(function (c) { return c.id === cityId; });
-  if (!city) return;
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    var city = CITIES.find(function (c) { return c.id === cityId; });
+    if (!city) return;
 
-  var originMap = { catalog: "catalog", passport: "passport", map: "map" };
-  state.stampOrigin = originMap[state.currentTab] || state.currentTab;
-  state.activeOverlayCityId = cityId;
+    var originMap = { catalog: "catalog", passport: "passport", map: "map" };
+    state.stampOrigin = originMap[state.currentTab] || state.currentTab;
+    state.activeOverlayCityId = cityId;
 
-  renderCityCard(cityId);
+    renderCityCard(cityId);
 
-  document.getElementById("city-card-overlay").style.display = "flex";
-  document.getElementById("tab-bar").classList.add("tab-bar-blocked");
+    document.getElementById("city-card-overlay").style.display = "flex";
+    document.getElementById("tab-bar").classList.add("tab-bar-blocked");
+  } finally {
+    setTimeout(function () { isProcessing = false; }, 400);
+  }
 }
 
 function closeCityCard() {
@@ -907,18 +941,30 @@ function closeDatePicker() {
 }
 
 function confirmVisit(cityId, date) {
-  state.visitedCities[cityId] = { date: date };
-  saveState();
-  closeDatePicker();
-  state.stampOverlayCityId = cityId;
-  renderStampOverlay(cityId);
-  document.getElementById("stamp-overlay").style.display = "flex";
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    state.visitedCities[cityId] = { date: date };
+    saveState();
+    closeDatePicker();
+    state.stampOverlayCityId = cityId;
+    renderStampOverlay(cityId);
+    document.getElementById("stamp-overlay").style.display = "flex";
+  } finally {
+    setTimeout(function () { isProcessing = false; }, 400);
+  }
 }
 
 function removeVisit(cityId) {
-  delete state.visitedCities[cityId];
-  saveState();
-  closeCityCard();
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    delete state.visitedCities[cityId];
+    saveState();
+    closeCityCard();
+  } finally {
+    setTimeout(function () { isProcessing = false; }, 400);
+  }
 }
 
 function init() {
