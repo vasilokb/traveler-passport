@@ -1,0 +1,45 @@
+﻿<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body>
+<div id="app" style="width:430px;background:#fff;margin:0 auto;overflow:hidden">
+  <div id="tab-map" style="display:block;padding:0 16px">
+    <div id="map-container" style="position:relative;width:100%">
+      <svg id="belarus-map" viewBox="1.472 1.809 1626.241 1450.672" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <path id="border-path" d="m 157.717,1452.48 -0.411,-0.373 -0.496,-0.495 0.175,-0.548 0.219,-0.684 -0.125,-1.209 -1.548,-3.186 0.341,-1.445 0.688,-1.071 0.685,0.601 1.073,-0.426 0.397,-1.254 -0.725,-2.691 0.166,-1.256 -0.827,-0.934 -0.246,-1.127 -1.284,0.578 -0.702,-0.243 -0.536,-1.247 -1.172,-0.053 -1.172,0.266 -1.061,-1.049 -0.129,-1.133 -1.064,-0.989 -0.362,-1.497 -0.488,-0.646 -0.876,-1.163 -1.422,-1.423 -1.7,-0.296 -0.729,-2.243 -0.77,-0.806 -1.226,0.198 -2.245,-1.544 -0.362,-1.187 -2.058,-0.66 -0.42,-0.814 0.751,-1.012 -0.009,-0.873 -0.89,-1.247 0.286,-0.503 -0.595,-0.866 -1.118,-0.114 -0.721,-1.619 0.215,-2.137 -0.385,-2.935 -1.324,-3.118 -1.229,0.389 -1.717,-1.673 -2.357,-0.913 -2.621,-3.033 -1.578,0.396 -1.118,-0.236 0.165,-0.881 -0.515,-3.878 -0.344,-0.578 -1.033,-1.719 -0.381,-2.189 0.613,-3.078 0.635,-0.822 1.986,-0.966 -0.126,-0.753 -0.652,-0.615 0.729,-3.141 1.392,-1.771 0.394,-1.635 1.467,-0.022 0.818,-0.57 0.156,-1.696 -0.479,-0.873 0.107,-1.004 0.872,-0.882 -0.125,-0.563 -1.02,-0.852 0.765,-0.775 0.514,-1.574 0.823,-0.137 0.466,-0.631 1.171,-0.205 -0.612,-2.183 -0.653,-0.554 0.931,-1.202 -0.125,-0.44 -1.414,-0.229 -0.545,-1.506 -1.252,-1.361 0.809,-1.262 -0.612,-2.182 -3.305,-0.525 -0.891,-0.615 -1.033,-2.555 0.282,-0.943 1.118,-0.205 2.97,-3.292 -0.229,-0.517 -1.109,-3.163 -1.073,-0.989 -1.937,0.897 -1.064,-0.045 -2.389,-2.426 6.024,-2.122 2.434,-3.01 0.854,-5.367 -2.898,-4.449 -2.375,-2.197 -1.248,-1.154 -1.087,-2.639 2.885,-4.897 0.443,-2.151 -1.879,-3.947 -0.818,-2.105 0.693,-2.159 6.208,-3.673 3.524,-2.06 4.669,-2.729 4.526,-0.677 3.45,1.696 1.962,4.586 3.025,3.327 2.312,-3.327 2.135,-0.908 3.052,-1.191 1.255,-0.619 0.913,0.168 1.677,0.608 2.397,0.874 2.536,1.574 1.569,0.98 0.326,2.927 -1.162,4.038 0.845,3.444 2.572,2.067 4.821,1.195 2.974,0.5 0.932,0.154 35.933,-20.117 8.29,-11.869 10.473,-11.868 5.236,-11.868 2.182,-15.578 0.437,-13.353 0.873,-8.16 7.418,-2.226 11.345,1.483 12.219,0 11.345,0.742 5.236,5.192 8.728,-2.225 3.927,-3.71 37.215,2.05 0,322.469 -1470.003,0 0,0.001 z" fill="#e8e8e8" stroke="#ccc" stroke-width="1"></path>
+        <g id="map-points-layer">
+          <circle cx="127.868" cy="1179.59" r="8" fill="red"></circle>
+          <circle cx="1177.679" cy="334.642" r="8" fill="blue"></circle>
+          <circle cx="150.088" cy="749.316" r="8" fill="green"></circle>
+          <circle cx="751.636" cy="685.924" r="8" fill="orange"></circle>
+        </g>
+      </svg>
+    </div>
+  </div>
+</div>
+<script>
+var svg = document.getElementById('belarus-map');
+var path = document.getElementById('border-path');
+var bbox = path.getBBox();
+var svgRect = svg.getBoundingClientRect();
+var result = {
+  svg_display: getComputedStyle(svg).display,
+  svg_width_css: getComputedStyle(svg).width,
+  svg_height_css: getComputedStyle(svg).height,
+  svg_offsetWidth: svg.offsetWidth,
+  svg_offsetHeight: svg.offsetHeight,
+  svg_viewBox: svg.viewBox.baseVal,
+  svg_clientRect: svgRect,
+  path_bbox: {x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height, bottom: bbox.y + bbox.height, right: bbox.x + bbox.width},
+  dots: []
+};
+var dots = document.querySelectorAll('#map-points-layer circle');
+dots.forEach(function(d) {
+  var r = d.getBoundingClientRect();
+  result.dots.push({cx: d.getAttribute('cx'), cy: d.getAttribute('cy'), screenX: r.left, screenY: r.top, color: d.getAttribute('fill')});
+});
+document.getElementById('output').textContent = JSON.stringify(result, null, 2);
+</script>
+<pre id="output"></pre>
+
+
+</body></html>

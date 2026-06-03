@@ -28,6 +28,312 @@ function createStampSVG(regionId) {
     '</svg>';
 }
 
+var MAP = {
+  viewBoxX: 1.472,
+  viewBoxY: 1.809,
+  viewBoxW: 1626.241,
+  viewBoxH: 1450.672,
+  geoN: 56.4,
+  geoS: 51.1,
+  geoW: 22.9,
+  geoE: 33.0,
+};
+
+function projectToSVG(lat, lon) {
+  var x =
+    MAP.viewBoxX +
+    ((lon - MAP.geoW) / (MAP.geoE - MAP.geoW)) * MAP.viewBoxW;
+  var y =
+    MAP.viewBoxY +
+    ((MAP.geoN - lat) / (MAP.geoN - MAP.geoS)) * MAP.viewBoxH;
+  return { x: x, y: y };
+}
+
+function renderMap() {
+  var pointsLayer = document.getElementById("map-points-layer");
+  if (!pointsLayer) return;
+
+  pointsLayer.innerHTML = "";
+
+  var filter = state.mapFilter || "all";
+  var totalVisited = Object.keys(state.visitedCities).length;
+  var emptyState = document.getElementById("map-empty-state");
+  var belarusMap = document.getElementById("belarus-map");
+
+  if (filter === "visited" && totalVisited === 0) {
+    if (belarusMap) belarusMap.style.opacity = "0.15";
+    if (emptyState) emptyState.style.display = "block";
+    return;
+  }
+
+  if (belarusMap) belarusMap.style.opacity = "1";
+  if (emptyState) emptyState.style.display = "none";
+
+  CITIES.forEach(function (city) {
+    var isVisited = !!state.visitedCities[city.id];
+    if (filter === "visited" && !isVisited) return;
+
+    var pos = projectToSVG(city.lat, city.lon);
+    var region = REGIONS.find(function (r) {
+      return r.id === city.region;
+    });
+    var dotColor = isVisited && region ? region.color : "#ccc";
+
+    var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "map-point");
+    g.setAttribute("data-city-id", city.id);
+
+    var hitbox = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle"
+    );
+    hitbox.setAttribute("cx", pos.x);
+    hitbox.setAttribute("cy", pos.y);
+    hitbox.setAttribute("r", "22");
+    hitbox.setAttribute("fill", "transparent");
+    hitbox.setAttribute("class", "hitbox");
+
+    var dot = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle"
+    );
+    dot.setAttribute("cx", pos.x);
+    dot.setAttribute("cy", pos.y);
+    dot.setAttribute("r", "7");
+    dot.setAttribute("fill", dotColor);
+    dot.setAttribute("class", "dot");
+
+    var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("class", "map-label");
+    label.setAttribute("x", pos.x + 14);
+    label.setAttribute("y", pos.y);
+    label.setAttribute("dy", "0.35em");
+    label.setAttribute("visibility", "hidden");
+    label.setAttribute("font-size", "26");
+    label.setAttribute("font-family", "-apple-system, BlinkMacSystemFont, sans-serif");
+    label.setAttribute("fill", "#333");
+    label.setAttribute("stroke", "#fff");
+    label.setAttribute("stroke-width", "3");
+    label.setAttribute("paint-order", "stroke fill");
+    label.textContent = city.name;
+
+    g.appendChild(hitbox);
+    g.appendChild(dot);
+    g.appendChild(label);
+    pointsLayer.appendChild(g);
+  });
+
+  updateMapLabels();
+}
+
+var MAP_ORIG_VB = { x: MAP.viewBoxX, y: MAP.viewBoxY, w: MAP.viewBoxW, h: MAP.viewBoxH };
+var mapViewBox = { x: MAP.viewBoxX, y: MAP.viewBoxY, w: MAP.viewBoxW, h: MAP.viewBoxH };
+var suppressMapClick = false;
+
+function updateMapViewBox() {
+  var svg = document.getElementById("belarus-map");
+  if (svg) {
+    svg.setAttribute("viewBox", mapViewBox.x + " " + mapViewBox.y + " " + mapViewBox.w + " " + mapViewBox.h);
+    svg.style.cursor = mapViewBox.w < MAP_ORIG_VB.w * 0.99 ? "grab" : "default";
+  }
+  updateMapLabels();
+}
+
+function zoomAtPoint(cx, cy, factor) {
+  var newW = mapViewBox.w * factor;
+  var newH = mapViewBox.h * factor;
+  if (newW >= MAP_ORIG_VB.w) { resetMapZoom(); return; }
+  var minW = MAP_ORIG_VB.w / 5;
+  if (newW < minW) { newW = minW; newH = newW * (MAP_ORIG_VB.h / MAP_ORIG_VB.w); }
+  var rx = (cx - mapViewBox.x) / mapViewBox.w;
+  var ry = (cy - mapViewBox.y) / mapViewBox.h;
+  mapViewBox.x = cx - rx * newW;
+  mapViewBox.y = cy - ry * newH;
+  mapViewBox.w = newW;
+  mapViewBox.h = newH;
+  updateMapViewBox();
+}
+
+function resetMapZoom() {
+  mapViewBox.x = MAP_ORIG_VB.x;
+  mapViewBox.y = MAP_ORIG_VB.y;
+  mapViewBox.w = MAP_ORIG_VB.w;
+  mapViewBox.h = MAP_ORIG_VB.h;
+  updateMapViewBox();
+}
+
+function updateMapLabels() {
+  var svg = document.getElementById("belarus-map");
+  if (!svg) return;
+
+  var labels = svg.querySelectorAll(".map-label");
+  if (labels.length === 0) return;
+
+  var zoomLevel = MAP_ORIG_VB.w / mapViewBox.w;
+
+  if (zoomLevel < 1.8) {
+    labels.forEach(function (l) { l.setAttribute("visibility", "hidden"); });
+    return;
+  }
+
+  var rect = svg.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+  var scaleX = rect.width / mapViewBox.w;
+  var scaleY = rect.height / mapViewBox.h;
+  var fontSize = 26;
+
+  var boxes = [];
+  labels.forEach(function (label) {
+    var x = parseFloat(label.getAttribute("x"));
+    var y = parseFloat(label.getAttribute("y"));
+    var text = label.textContent;
+    var estW = text.length * fontSize * 0.48 * scaleX;
+    var estH = fontSize * scaleY;
+    var screenX = (x - mapViewBox.x) * scaleX;
+    var screenY = (y - mapViewBox.y) * scaleY;
+    var pad = 4;
+    boxes.push({
+      el: label,
+      left: screenX - pad,
+      top: screenY - estH / 2 - pad,
+      right: screenX + estW + pad,
+      bottom: screenY + estH / 2 + pad,
+      cityId: label.parentNode ? label.parentNode.dataset.cityId : ""
+    });
+  });
+
+  boxes.sort(function (a, b) {
+    var aV = !!state.visitedCities[a.cityId];
+    var bV = !!state.visitedCities[b.cityId];
+    if (aV !== bV) return bV ? 1 : -1;
+    return 0;
+  });
+
+  var placed = [];
+  boxes.forEach(function (box) {
+    var overlaps = false;
+    for (var i = 0; i < placed.length; i++) {
+      if (!(box.right < placed[i].left || box.left > placed[i].right ||
+            box.bottom < placed[i].top || box.top > placed[i].bottom)) {
+        overlaps = true;
+        break;
+      }
+    }
+    if (overlaps) {
+      box.el.setAttribute("visibility", "hidden");
+    } else {
+      box.el.setAttribute("visibility", "visible");
+      placed.push(box);
+    }
+  });
+}
+
+function renderStampOverlay(cityId) {
+  var city = CITIES.find(function (c) {
+    return c.id === cityId;
+  });
+  if (!city) return;
+
+  var region = REGIONS.find(function (r) {
+    return r.id === city.region;
+  });
+  var regionColor = region ? region.color : "#ccc";
+
+  var html = "";
+  html += '<div class="stamp-card">';
+  html +=
+    '  <div class="stamp-card-icon" style="color:' +
+    regionColor +
+    '">' +
+    createStampSVG(city.region) +
+    "</div>";
+  html +=
+    '  <div class="stamp-card-city">' + escapeHtml(city.name) + "</div>";
+  html += '  <div class="stamp-card-actions">';
+  html +=
+    '    <button class="stamp-card-btn stamp-card-btn-share" id="stamp-share-btn">Поделиться</button>';
+  html +=
+    '    <button class="stamp-card-btn stamp-card-btn-collection" id="stamp-collection-btn">В коллекцию</button>';
+  html += "  </div>";
+  html += "</div>";
+
+  document.getElementById("stamp-overlay-content").innerHTML = html;
+
+  var shareBtn = document.getElementById("stamp-share-btn");
+  if (shareBtn) shareBtn.addEventListener("click", function () { showShareText(city.name); });
+
+  var collectionBtn = document.getElementById("stamp-collection-btn");
+  if (collectionBtn)
+    collectionBtn.addEventListener("click", function () { goToCollection(cityId); });
+}
+
+function closeStampOverlay() {
+  state.stampOverlayCityId = null;
+  document.getElementById("stamp-overlay").style.display = "none";
+}
+
+function goToCollection(cityId) {
+  closeStampOverlay();
+  closeCityCard();
+
+  state.currentTab = "passport";
+
+  var city = CITIES.find(function (c) {
+    return c.id === cityId;
+  });
+  var regionId = city ? city.region : null;
+
+  if (regionId && state.openedRegions.indexOf(regionId) === -1) {
+    state.openedRegions.push(regionId);
+  }
+
+  switchTab("passport");
+
+  if (regionId && cityId) {
+    setTimeout(function () {
+      var cell = document.querySelector(
+        '.stamp-cell[data-city-id="' + cityId + '"]'
+      );
+      if (cell) {
+        cell.scrollIntoView({ behavior: "smooth", block: "center" });
+        cell.classList.add("stamp-highlight");
+        setTimeout(function () {
+          cell.classList.remove("stamp-highlight");
+        }, 2000);
+      }
+    }, 300);
+  }
+}
+
+function showShareText(cityName) {
+  var text =
+    "Я посетил " +
+    cityName +
+    " и получил штамп в Паспорте путешественника по Беларуси! 🇧🇾";
+
+  if (navigator.share) {
+    navigator.share({ title: "Паспорт путешественника", text: text }).catch(
+      function () {}
+    );
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () {
+      showToast("Текст скопирован");
+    }).catch(function () {});
+  }
+}
+
+function showToast(message) {
+  var toast = document.getElementById("toast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.style.display = "block";
+  toast.classList.add("visible");
+  setTimeout(function () {
+    toast.style.display = "none";
+    toast.classList.remove("visible");
+  }, 2000);
+}
+
 const CITIES = [
   { id: "minsk", name: "Минск", region: "minsk", lat: 53.9006, lon: 27.5590, description: "Столица Беларуси с монументальной сталинской архитектурой проспекта Независимости, Троицким предместьем и одним из старейших университетов Восточной Европы." },
   { id: "nesvizh", name: "Несвиж", region: "minsk_obl", lat: 53.2227, lon: 26.6753, description: "Жемчужина белорусской архитектуры — дворцово-парковый комплекс Радзивиллов и костёл Божьего Тела, занесённые в список ЮНЕСКО." },
@@ -119,11 +425,22 @@ function loadState() {
       openedRegions: [],
     };
   }
+  state.catalogFilter = state.catalogFilter || "all";
+  state.catalogSearchQuery = state.catalogSearchQuery || "";
+  state.mapFilter = state.mapFilter || "all";
+  state.stampOverlayCityId = null;
+  state.openedRegions = state.openedRegions || [];
 }
 
 function saveState() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    var toSave = {
+      currentTab: state.currentTab,
+      travelerName: state.travelerName,
+      onboardingComplete: state.onboardingComplete,
+      visitedCities: state.visitedCities,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) {}
 }
 
@@ -149,6 +466,10 @@ function switchTab(tabId) {
     renderPassport();
   }
 
+  if (tabId === "map") {
+    renderMap();
+  }
+
   if (tabId === "profile") {
     renderProfile();
   }
@@ -158,7 +479,41 @@ function renderCatalog() {
   var container = document.getElementById("catalog-list");
   container.innerHTML = "";
 
+  var query = (state.catalogSearchQuery || "").toLowerCase();
+  var filter = state.catalogFilter || "all";
+
+  var totalVisited = Object.keys(state.visitedCities).length;
+  var totalCities = CITIES.length;
+
+  if (filter === "visited" && totalVisited === 0) {
+    container.innerHTML = '<div class="catalog-empty-state">Здесь появятся города, которые вы посетили. Время отправляться в путь!</div>';
+    return;
+  }
+
+  if (filter === "unvisited" && totalVisited === totalCities) {
+    container.innerHTML = '<div class="catalog-empty-state">Ура! Вы прошли всю Беларусь! Все штампы собраны.</div>';
+    return;
+  }
+
+  var hasAnyCity = false;
+
   REGIONS.forEach(function (region) {
+    var citiesInRegion = CITIES.filter(function (c) {
+      return c.region === region.id;
+    });
+
+    var filtered = citiesInRegion.filter(function (city) {
+      var isVisited = !!state.visitedCities[city.id];
+      if (filter === "visited" && !isVisited) return false;
+      if (filter === "unvisited" && isVisited) return false;
+      if (query && city.name.toLowerCase().indexOf(query) === -1) return false;
+      return true;
+    });
+
+    if (filtered.length === 0) return;
+
+    hasAnyCity = true;
+
     var group = document.createElement("div");
     group.className = "region-group";
 
@@ -169,11 +524,7 @@ function renderCatalog() {
       '<span class="region-name">' + region.name + "</span>";
     group.appendChild(header);
 
-    var citiesInRegion = CITIES.filter(function (c) {
-      return c.region === region.id;
-    });
-
-    citiesInRegion.forEach(function (city) {
+    filtered.forEach(function (city) {
       var item = document.createElement("div");
       item.className = "city-item";
       item.dataset.cityId = city.id;
@@ -188,6 +539,10 @@ function renderCatalog() {
 
     container.appendChild(group);
   });
+
+  if (!hasAnyCity && query) {
+    container.innerHTML = '<div class="catalog-empty-state">Ничего не найдено</div>';
+  }
 }
 
 function getTodayLocal() {
@@ -555,8 +910,9 @@ function confirmVisit(cityId, date) {
   state.visitedCities[cityId] = { date: date };
   saveState();
   closeDatePicker();
-  closeCityCard();
-  console.log("Штамп получен:", cityId);
+  state.stampOverlayCityId = cityId;
+  renderStampOverlay(cityId);
+  document.getElementById("stamp-overlay").style.display = "flex";
 }
 
 function removeVisit(cityId) {
@@ -578,8 +934,243 @@ function init() {
   var catalogList = document.getElementById("catalog-list");
   catalogList.addEventListener("click", handleCatalogClick);
 
+  var catalogControls = document.querySelector(".catalog-controls");
+  if (catalogControls) {
+    catalogControls.addEventListener("click", function (e) {
+      var btn = e.target.closest(".filter-btn");
+      if (!btn) return;
+      state.catalogFilter = btn.dataset.filter;
+      document.querySelectorAll(".filter-btn").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.filter === state.catalogFilter);
+      });
+      renderCatalog();
+    });
+
+    var searchInput = document.getElementById("catalog-search");
+    if (searchInput) {
+      var debounceTimer = null;
+      searchInput.addEventListener("input", function (e) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+          state.catalogSearchQuery = e.target.value;
+          renderCatalog();
+        }, 300);
+      });
+    }
+  }
+
   var passportList = document.getElementById("passport-list");
   if (passportList) passportList.addEventListener("click", handlePassportClick);
+
+  var mapContainer = document.getElementById("map-container");
+  if (mapContainer) {
+    mapContainer.addEventListener("click", function (e) {
+      if (suppressMapClick) { suppressMapClick = false; return; }
+      var point = e.target.closest(".map-point");
+      if (!point) return;
+      var cityId = point.dataset.cityId;
+      if (!cityId) return;
+      state.stampOrigin = "map";
+      openCityCard(cityId);
+    });
+  }
+
+  var mapControls = document.querySelector(".map-controls");
+  if (mapControls) {
+    mapControls.addEventListener("click", function (e) {
+      var btn = e.target.closest(".map-filter-btn");
+      if (!btn) return;
+      state.mapFilter = btn.dataset.mapFilter;
+      document.querySelectorAll(".map-filter-btn").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.mapFilter === state.mapFilter);
+      });
+      renderMap();
+    });
+  }
+
+  var zoomInBtn = document.getElementById("map-zoom-in");
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var cx = mapViewBox.x + mapViewBox.w / 2;
+      var cy = mapViewBox.y + mapViewBox.h / 2;
+      zoomAtPoint(cx, cy, 1 / 1.5);
+    });
+  }
+
+  var zoomOutBtn = document.getElementById("map-zoom-out");
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var cx = mapViewBox.x + mapViewBox.w / 2;
+      var cy = mapViewBox.y + mapViewBox.h / 2;
+      zoomAtPoint(cx, cy, 1.5);
+    });
+  }
+
+  var mapSvg = document.getElementById("belarus-map");
+  if (mapSvg) {
+    mapSvg.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      var rect = mapSvg.getBoundingClientRect();
+      var mx = mapViewBox.x + ((e.clientX - rect.left) / rect.width) * mapViewBox.w;
+      var my = mapViewBox.y + ((e.clientY - rect.top) / rect.height) * mapViewBox.h;
+      var factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+      zoomAtPoint(mx, my, factor);
+    }, { passive: false });
+  }
+
+  var mapTouchState = {
+    dragging: false,
+    pinching: false,
+    startX: 0,
+    startY: 0,
+    startVb: null,
+    pinchDist: 0,
+    moved: false
+  };
+
+  if (mapContainer) {
+    mapContainer.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 2) {
+        mapTouchState.pinching = true;
+        mapTouchState.dragging = false;
+        mapTouchState.startVb = { x: mapViewBox.x, y: mapViewBox.y, w: mapViewBox.w, h: mapViewBox.h };
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        mapTouchState.pinchDist = Math.sqrt(dx * dx + dy * dy);
+        e.preventDefault();
+      } else if (e.touches.length === 1) {
+        mapTouchState.dragging = false;
+        mapTouchState.pinching = false;
+        mapTouchState.moved = false;
+        mapTouchState.startX = e.touches[0].clientX;
+        mapTouchState.startY = e.touches[0].clientY;
+        mapTouchState.startVb = { x: mapViewBox.x, y: mapViewBox.y, w: mapViewBox.w, h: mapViewBox.h };
+      }
+    }, { passive: false });
+
+    mapContainer.addEventListener("touchmove", function (e) {
+      if (mapTouchState.pinching && e.touches.length === 2) {
+        e.preventDefault();
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        var newDist = Math.sqrt(dx * dx + dy * dy);
+        if (mapTouchState.pinchDist < 1) return;
+        var scale = mapTouchState.pinchDist / newDist;
+        var newW = mapTouchState.startVb.w * scale;
+        var newH = mapTouchState.startVb.h * scale;
+        if (newW >= MAP_ORIG_VB.w) { resetMapZoom(); return; }
+        var minW = MAP_ORIG_VB.w / 5;
+        if (newW < minW) {
+          newW = minW;
+          newH = newW * (MAP_ORIG_VB.h / MAP_ORIG_VB.w);
+        }
+        var svgEl = document.getElementById("belarus-map");
+        var rect = svgEl.getBoundingClientRect();
+        var pcx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        var pcy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        var rx = (pcx - rect.left) / rect.width;
+        var ry = (pcy - rect.top) / rect.height;
+        var origCx = mapTouchState.startVb.x + rx * mapTouchState.startVb.w;
+        var origCy = mapTouchState.startVb.y + ry * mapTouchState.startVb.h;
+        mapViewBox.x = origCx - rx * newW;
+        mapViewBox.y = origCy - ry * newH;
+        mapViewBox.w = newW;
+        mapViewBox.h = newH;
+        updateMapViewBox();
+      } else if (e.touches.length === 1 && !mapTouchState.pinching) {
+        var tdx = e.touches[0].clientX - mapTouchState.startX;
+        var tdy = e.touches[0].clientY - mapTouchState.startY;
+        if (!mapTouchState.moved && (Math.abs(tdx) > 8 || Math.abs(tdy) > 8)) {
+          mapTouchState.moved = true;
+          mapTouchState.dragging = true;
+        }
+        if (mapTouchState.dragging && mapViewBox.w < MAP_ORIG_VB.w * 0.99) {
+          e.preventDefault();
+          suppressMapClick = true;
+          var svgEl2 = document.getElementById("belarus-map");
+          var rect2 = svgEl2.getBoundingClientRect();
+          mapViewBox.x = mapTouchState.startVb.x - (tdx / rect2.width) * mapTouchState.startVb.w;
+          mapViewBox.y = mapTouchState.startVb.y - (tdy / rect2.height) * mapTouchState.startVb.h;
+          mapViewBox.w = mapTouchState.startVb.w;
+          mapViewBox.h = mapTouchState.startVb.h;
+          updateMapViewBox();
+        }
+      }
+    }, { passive: false });
+
+    mapContainer.addEventListener("touchend", function (e) {
+      if (mapTouchState.moved) suppressMapClick = true;
+      if (e.touches.length === 0) {
+        mapTouchState.dragging = false;
+        mapTouchState.pinching = false;
+        mapTouchState.moved = false;
+      } else if (e.touches.length === 1 && mapTouchState.pinching) {
+        mapTouchState.pinching = false;
+        mapTouchState.dragging = false;
+        mapTouchState.moved = false;
+        mapTouchState.startX = e.touches[0].clientX;
+        mapTouchState.startY = e.touches[0].clientY;
+        mapTouchState.startVb = { x: mapViewBox.x, y: mapViewBox.y, w: mapViewBox.w, h: mapViewBox.h };
+      }
+    });
+  }
+
+  var mapDragState = { active: false, moved: false, startX: 0, startY: 0, startVb: null };
+
+  if (mapSvg) {
+    mapSvg.addEventListener("mousedown", function (e) {
+      if (e.button !== 0) return;
+      if (mapViewBox.w >= MAP_ORIG_VB.w * 0.99) return;
+      mapDragState.active = true;
+      mapDragState.moved = false;
+      mapDragState.startX = e.clientX;
+      mapDragState.startY = e.clientY;
+      mapDragState.startVb = { x: mapViewBox.x, y: mapViewBox.y, w: mapViewBox.w, h: mapViewBox.h };
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", function (e) {
+      if (!mapDragState.active) return;
+      var dx = e.clientX - mapDragState.startX;
+      var dy = e.clientY - mapDragState.startY;
+      if (!mapDragState.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        mapDragState.moved = true;
+      }
+      if (mapDragState.moved) {
+        var rect = mapSvg.getBoundingClientRect();
+        mapViewBox.x = mapDragState.startVb.x - (dx / rect.width) * mapDragState.startVb.w;
+        mapViewBox.y = mapDragState.startVb.y - (dy / rect.height) * mapDragState.startVb.h;
+        mapViewBox.w = mapDragState.startVb.w;
+        mapViewBox.h = mapDragState.startVb.h;
+        updateMapViewBox();
+      }
+    });
+
+    document.addEventListener("mouseup", function () {
+      if (mapDragState.active && mapDragState.moved) {
+        suppressMapClick = true;
+      }
+      mapDragState.active = false;
+      mapDragState.moved = false;
+    });
+
+    mapSvg.style.cursor = mapViewBox.w < MAP_ORIG_VB.w * 0.99 ? "grab" : "default";
+  }
+
+  var stampOverlay = document.getElementById("stamp-overlay");
+  if (stampOverlay) {
+    stampOverlay.addEventListener("click", function (e) {
+      if (e.target !== e.currentTarget) return;
+      var origin = state.stampOrigin;
+      closeStampOverlay();
+      closeCityCard();
+      if (origin) {
+        switchTab(origin);
+      }
+    });
+  }
 
   var continueBtn = document.getElementById("onboarding-continue");
   if (continueBtn) continueBtn.addEventListener("click", handleOnboardingContinue);

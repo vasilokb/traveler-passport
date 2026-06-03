@@ -901,6 +901,298 @@ body {
   color: #666;
 }
 
+/* Catalog controls */
+.catalog-controls {
+  padding: 0 0 12px;
+  position: sticky;
+  top: 56px;
+  background: #ffffff;
+  z-index: 10;
+}
+
+#catalog-search {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 16px;
+  font-family: inherit;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s;
+  margin-bottom: 10px;
+}
+
+#catalog-search:focus {
+  border-color: #27AE60;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-btn {
+  flex: 1;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn.active {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: #ffffff;
+}
+
+/* Map */
+.map-header {
+  padding: 20px 0 12px;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 10;
+}
+
+.map-header h1 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.map-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.map-filter-btn {
+  flex: 1;
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.map-filter-btn.active {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: #ffffff;
+}
+
+#map-container {
+  position: relative;
+  width: 100%;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.map-zoom-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.map-zoom-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid #ddd;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: #1a1a1a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+}
+
+.map-zoom-btn:active {
+  background: #f0f0f0;
+}
+
+#map-container svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.map-point {
+  cursor: pointer;
+}
+
+.map-point circle.hitbox {
+  fill: transparent;
+}
+
+.map-point circle.dot {
+  transition: r 0.15s;
+}
+
+.map-point:hover circle.dot {
+  r: 7;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  color: #8e8e93;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.catalog-empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: #8e8e93;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+/* Stamp overlay */
+#stamp-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.stamp-card {
+  background: #ffffff;
+  border-radius: 20px;
+  max-width: 340px;
+  width: 100%;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.stamp-card-icon {
+  width: 200px;
+  height: 200px;
+  margin: 0 auto 20px;
+  animation: stamp-imprint 0.4s ease-out;
+}
+
+@keyframes stamp-imprint {
+  from {
+    transform: scale(1.6) rotate(-15deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.stamp-card-city {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 24px;
+}
+
+.stamp-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stamp-card-btn {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 14px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.stamp-card-btn:active {
+  opacity: 0.8;
+}
+
+.stamp-card-btn-share {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+.stamp-card-btn-collection {
+  background: #27AE60;
+  color: #ffffff;
+}
+
+.stamp-highlight {
+  animation: stamp-pulse 2s ease-out;
+}
+
+@keyframes stamp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(39, 174, 96, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(39, 174, 96, 0);
+  }
+}
+
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  z-index: 400;
+  white-space: nowrap;
+  max-width: 90%;
+  text-align: center;
+}
+
+#toast.visible {
+  display: block !important;
+}
+
 @media (max-width: 430px) {
   #tab-bar {
     left: 0;

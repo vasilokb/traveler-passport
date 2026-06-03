@@ -29,20 +29,42 @@
       </header>
       <div id="passport-list"></div>
     </div>
-
     <div id="tab-catalog" class="tab-content">
       <header class="catalog-header">
         <h1>Каталог городов</h1>
       </header>
+      <div class="catalog-controls">
+        <input type="text" id="catalog-search" placeholder="Поиск города..." />
+        <div class="filter-tabs">
+          <button class="filter-btn active" data-filter="all">Все</button>
+          <button class="filter-btn" data-filter="visited">Посещённые</button>
+          <button class="filter-btn" data-filter="unvisited">Непосещённые</button>
+        </div>
+      </div>
       <div id="catalog-list"></div>
     </div>
-
     <div id="tab-map" class="tab-content">
-      <div class="placeholder">
-        <p>Карта (скоро)</p>
+      <header class="map-header">
+        <h1>Карта Беларуси</h1>
+      </header>
+      <div class="map-controls">
+        <button class="map-filter-btn active" data-map-filter="all">Все города</button>
+        <button class="map-filter-btn" data-map-filter="visited">Посещённые</button>
+      </div>
+      <div id="map-container">
+        <svg id="belarus-map" viewBox="1.472 1.809 1626.241 1450.672" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 73.16,677.84 L 233.46,679.76 413.51,573.55 452,414.39 587.96,324.12 572.38,197.84 673.24,150.41 851.4,41.64 1026,112.35 1049.56,182.33 1136.58,148.68 1298.71,215.92 1314.95,348.26 1279.41,424.31 1383.39,608.89 1450.88,660.32 1440.9,711.24 1552.73,760.85 1600.5,836.02 1535.97,897.68 1402.15,887.89 1370.24,914.23 1409.18,1007.82 1449.98,1188.35 1307.61,1205.08 1256.51,1266.97 1245.84,1408.86 1179.88,1381.62 1030.21,1395.13 986.75,1329.21 924.52,1378.36 862.16,1337.62 731.55,1331.96 546.45,1264.3 378.92,1242.21 250.44,1248.46 159.55,1324.87 80.28,1335.86 77.12,1210.35 25.95,1079.73 125.41,1022.18 126.36,909.8 80.36,802.56 73.16,677.84 Z" fill="#e8e8e8" stroke="#ccc" stroke-width="1"/>
+          <g id="map-points-layer"></g>
+        </svg>
+        <div id="map-empty-state" class="empty-state" style="display:none;">
+          Вы пока не отметили ни одного города. Перейдите в Каталог или Паспорт, чтобы поставить первые штампы!
+        </div>
+        <div class="map-zoom-controls" id="map-zoom-controls">
+          <button class="map-zoom-btn" id="map-zoom-in" aria-label="Приблизить">+</button>
+          <button class="map-zoom-btn" id="map-zoom-out" aria-label="Уменьшить">&#8722;</button>
+        </div>
       </div>
     </div>
-
     <div id="tab-profile" class="tab-content"></div>
 
     <nav id="tab-bar">
@@ -72,7 +94,11 @@
   <div id="date-picker-modal" style="display:none">
     <div id="date-picker-content"></div>
   </div>
+  <div id="stamp-overlay" style="display:none">
+    <div id="stamp-overlay-content"></div>
+  </div>
 
+  <div id="toast" style="display:none"></div>
   <script src="app.js"></script>
 </body>
 </html>
