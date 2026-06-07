@@ -1247,6 +1247,7 @@ function init() {
     passportControls.addEventListener("click", function (e) {
       var btn = e.target.closest(".passport-filter-btn");
       if (!btn) return;
+      if (btn.classList.contains("disabled")) return;
       state.passportFilter = btn.dataset.filter;
       document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
         b.classList.toggle("active", b.dataset.filter === state.passportFilter);
@@ -1545,3 +1546,14 @@ function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  var hasControllerOnLoad = !!navigator.serviceWorker.controller;
+  var updateToastShown = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (hasControllerOnLoad && !updateToastShown) {
+      updateToastShown = true;
+      showToast("Приложение обновлено");
+    }
+  });
+}
