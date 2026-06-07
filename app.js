@@ -397,10 +397,12 @@ const CITIES = [
 const STORAGE_KEY = "travelerPassport";
 
 let state = {
-  currentTab: "catalog",
+  currentTab: "passport",
   travelerName: "Белорусский путешественник",
   onboardingComplete: false,
   visitedCities: {},
+  plannedCities: {},
+  cityNotes: {},
   openedRegions: [],
   activeOverlayCityId: null,
   stampOrigin: null,
@@ -411,7 +413,8 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      state.currentTab = saved.currentTab || "catalog";
+      state.currentTab = saved.currentTab || "passport";
+      if (state.currentTab === "catalog") state.currentTab = "passport";
       if (typeof saved.travelerName === "string" && saved.travelerName.trim()) {
         state.travelerName = saved.travelerName;
       } else {
@@ -434,6 +437,38 @@ function loadState() {
       } else {
         state.visitedCities = {};
       }
+      if (saved.plannedCities && typeof saved.plannedCities === "object" && !Array.isArray(saved.plannedCities)) {
+        var validPlanned = {};
+        var plannedIds = Object.keys(saved.plannedCities);
+        for (var j = 0; j < plannedIds.length; j++) {
+          var pid = plannedIds[j];
+          if (saved.plannedCities[pid] !== true) continue;
+          if (!CITIES.find(function (c) { return c.id === pid; })) continue;
+          validPlanned[pid] = true;
+        }
+        state.plannedCities = validPlanned;
+      } else {
+        state.plannedCities = {};
+      }
+      if (saved.cityNotes && typeof saved.cityNotes === "object" && !Array.isArray(saved.cityNotes)) {
+        var validNotes = {};
+        var noteIds = Object.keys(saved.cityNotes);
+        for (var k = 0; k < noteIds.length; k++) {
+          var nid = noteIds[k];
+          if (typeof saved.cityNotes[nid] !== "string") continue;
+          if (!CITIES.find(function (c) { return c.id === nid; })) continue;
+          validNotes[nid] = saved.cityNotes[nid];
+        }
+        state.cityNotes = validNotes;
+      } else {
+        state.cityNotes = {};
+      }
+      var visitedKeys = Object.keys(state.visitedCities);
+      for (var m = 0; m < visitedKeys.length; m++) {
+        if (state.plannedCities[visitedKeys[m]]) {
+          delete state.plannedCities[visitedKeys[m]];
+        }
+      }
       var needsFix = (typeof saved.travelerName !== "string") ||
         (saved.visitedCities && (typeof saved.visitedCities !== "object" || Array.isArray(saved.visitedCities)));
       if (needsFix) {
@@ -442,15 +477,17 @@ function loadState() {
     }
   } catch (e) {
     state = {
-      currentTab: "catalog",
+      currentTab: "passport",
       travelerName: "Белорусский путешественник",
       onboardingComplete: false,
       visitedCities: {},
+      plannedCities: {},
+      cityNotes: {},
       openedRegions: [],
     };
   }
-  state.catalogFilter = state.catalogFilter || "all";
-  state.catalogSearchQuery = state.catalogSearchQuery || "";
+  state.passportFilter = "all";
+  state.passportSearchQuery = "";
   state.mapFilter = state.mapFilter || "all";
   state.stampOverlayCityId = null;
   state.openedRegions = state.openedRegions || [];
@@ -463,6 +500,8 @@ function saveState() {
       travelerName: state.travelerName,
       onboardingComplete: state.onboardingComplete,
       visitedCities: state.visitedCities,
+      plannedCities: state.plannedCities,
+      cityNotes: state.cityNotes,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) {
@@ -484,10 +523,6 @@ function switchTab(tabId) {
     btn.classList.toggle("active", btn.dataset.tab === tabId);
   });
 
-  if (tabId === "catalog") {
-    renderCatalog();
-  }
-
   if (tabId === "passport") {
     renderPassport();
   }
@@ -501,86 +536,8 @@ function switchTab(tabId) {
   }
 }
 
-function renderCatalog() {
-  var container = document.getElementById("catalog-list");
-  container.innerHTML = "";
-
-  var query = (state.catalogSearchQuery || "").toLowerCase();
-  var filter = state.catalogFilter || "all";
-
-  var totalVisited = Object.keys(state.visitedCities).length;
-  var totalCities = CITIES.length;
-
-  if (filter === "visited" && totalVisited === 0) {
-    container.innerHTML = '<div class="catalog-empty-state">Здесь появятся города, которые вы посетили. Время отправляться в путь!</div>';
-    return;
-  }
-
-  if (filter === "unvisited" && totalVisited === totalCities) {
-    container.innerHTML = '<div class="catalog-empty-state">Ура! Вы прошли всю Беларусь! Все штампы собраны.</div>';
-    return;
-  }
-
-  var hasAnyCity = false;
-
-  REGIONS.forEach(function (region) {
-    var citiesInRegion = CITIES.filter(function (c) {
-      return c.region === region.id;
-    });
-
-    var filtered = citiesInRegion.filter(function (city) {
-      var isVisited = !!state.visitedCities[city.id];
-      if (filter === "visited" && !isVisited) return false;
-      if (filter === "unvisited" && isVisited) return false;
-      if (query && city.name.toLowerCase().indexOf(query) === -1) return false;
-      return true;
-    });
-
-    if (filtered.length === 0) return;
-
-    hasAnyCity = true;
-
-    var group = document.createElement("div");
-    group.className = "region-group";
-
-    var header = document.createElement("div");
-    header.className = "region-header";
-    header.innerHTML =
-      '<span class="region-dot" style="background:' + region.color + '"></span>' +
-      '<span class="region-name">' + region.name + "</span>";
-    group.appendChild(header);
-
-    filtered.forEach(function (city) {
-      var item = document.createElement("div");
-      item.className = "city-item";
-      item.dataset.cityId = city.id;
-      if (state.visitedCities[city.id]) {
-        item.classList.add("visited");
-      }
-      item.innerHTML =
-        '<span class="city-check"></span>' +
-        '<span class="city-name">' + city.name + "</span>";
-      group.appendChild(item);
-    });
-
-    container.appendChild(group);
-  });
-
-  if (!hasAnyCity && query) {
-    container.innerHTML = '<div class="catalog-empty-state">Ничего не найдено</div>';
-  }
-}
-
 function getTodayLocal() {
   return new Date().toLocaleDateString("sv-SE");
-}
-
-function handleCatalogClick(e) {
-  var item = e.target.closest(".city-item");
-  if (!item) return;
-  var cityId = item.dataset.cityId;
-  if (!cityId) return;
-  openCityCard(cityId);
 }
 
 function renderPassport() {
@@ -842,7 +799,7 @@ function openCityCard(cityId) {
     var city = CITIES.find(function (c) { return c.id === cityId; });
     if (!city) return;
 
-    var originMap = { catalog: "catalog", passport: "passport", map: "map" };
+    var originMap = { passport: "passport", map: "map" };
     state.stampOrigin = originMap[state.currentTab] || state.currentTab;
     state.activeOverlayCityId = cityId;
 
@@ -977,34 +934,6 @@ function init() {
     switchTab(btn.dataset.tab);
   });
 
-  var catalogList = document.getElementById("catalog-list");
-  catalogList.addEventListener("click", handleCatalogClick);
-
-  var catalogControls = document.querySelector(".catalog-controls");
-  if (catalogControls) {
-    catalogControls.addEventListener("click", function (e) {
-      var btn = e.target.closest(".filter-btn");
-      if (!btn) return;
-      state.catalogFilter = btn.dataset.filter;
-      document.querySelectorAll(".filter-btn").forEach(function (b) {
-        b.classList.toggle("active", b.dataset.filter === state.catalogFilter);
-      });
-      renderCatalog();
-    });
-
-    var searchInput = document.getElementById("catalog-search");
-    if (searchInput) {
-      var debounceTimer = null;
-      searchInput.addEventListener("input", function (e) {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(function () {
-          state.catalogSearchQuery = e.target.value;
-          renderCatalog();
-        }, 300);
-      });
-    }
-  }
-
   var passportList = document.getElementById("passport-list");
   if (passportList) passportList.addEventListener("click", handlePassportClick);
 
@@ -1030,6 +959,7 @@ function init() {
       document.querySelectorAll(".map-filter-btn").forEach(function (b) {
         b.classList.toggle("active", b.dataset.mapFilter === state.mapFilter);
       });
+      if (state.mapFilter === "planned") return;
       renderMap();
     });
   }
@@ -1238,8 +1168,6 @@ function init() {
   document.getElementById("date-picker-modal").addEventListener("click", function (e) {
     if (e.target === e.currentTarget) closeDatePicker();
   });
-
-  renderCatalog();
 
   if (!state.onboardingComplete) {
     showOnboarding();
