@@ -735,31 +735,64 @@ body {
   max-width: 400px;
   width: 100%;
   padding: 20px;
-  position: relative;
-  max-height: calc(100vh - 40px);
+  max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
 }
 
-.city-card-close {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 44px;
-  height: 44px;
+.city-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.city-card-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.city-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.city-card-btn-wishlist,
+.city-card-btn-close {
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: none;
+  border-radius: 50%;
+  background: #f5f5f5;
   border: none;
-  font-size: 1.5rem;
-  color: #999;
   cursor: pointer;
-  border-radius: 8px;
-  transition: background-color 0.15s;
+  transition: all 0.2s;
+  padding: 0;
 }
 
-.city-card-close:active {
-  background: #f0f0f0;
+.city-card-btn-close {
+  font-size: 24px;
+  color: #999;
+  line-height: 1;
+}
+
+.city-card-btn-wishlist {
+  color: #666;
+}
+
+.city-card-btn-wishlist.active {
+  background: color-mix(in srgb, var(--region-color, #27AE60) 12%, transparent);
+  color: var(--region-color, #27AE60);
+}
+
+.city-card-btn-wishlist:active,
+.city-card-btn-close:active {
+  background: #e0e0e0;
 }
 
 .city-card-stamp {
@@ -778,8 +811,7 @@ body {
   font-size: 1.5rem;
   font-weight: 700;
   color: #1a1a1a;
-  margin-bottom: 4px;
-  padding-right: 32px;
+  margin: 0 0 4px 0;
 }
 
 .city-card-region {
@@ -832,6 +864,32 @@ body {
 .city-card-btn-danger {
   background: #fff0f0;
   color: #E74C3C;
+}
+
+.city-card-note {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  line-height: 1.5;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+  background: #fcfcfc;
+  margin-top: 8px;
+  margin-bottom: 24px;
+}
+
+.city-card-note:focus {
+  border-color: #27AE60;
+}
+
+.city-card-note::placeholder {
+  color: #999;
 }
 
 #date-picker-modal {

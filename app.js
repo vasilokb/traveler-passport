@@ -914,11 +914,44 @@ function cancelEditName() {
 }
 
 let isProcessing = false;
+var noteDebounceTimer = null;
+
+function togglePlanned(cityId) {
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    if (state.visitedCities[cityId]) return;
+    if (state.plannedCities[cityId]) {
+      delete state.plannedCities[cityId];
+    } else {
+      state.plannedCities[cityId] = true;
+    }
+    saveState();
+    clearTimeout(noteDebounceTimer);
+    noteDebounceTimer = null;
+    renderCityCard(cityId);
+  } finally {
+    setTimeout(function () { isProcessing = false; }, 400);
+  }
+}
+
+function saveNote(cityId, text) {
+  var trimmed = text.trim();
+  if (trimmed) {
+    state.cityNotes[cityId] = trimmed;
+  } else {
+    delete state.cityNotes[cityId];
+  }
+  saveState();
+}
 
 function openCityCard(cityId) {
   if (isProcessing) return;
   isProcessing = true;
   try {
+    clearTimeout(noteDebounceTimer);
+    noteDebounceTimer = null;
+
     var city = CITIES.find(function (c) { return c.id === cityId; });
     if (!city) return;
 
@@ -936,6 +969,13 @@ function openCityCard(cityId) {
 }
 
 function closeCityCard() {
+  clearTimeout(noteDebounceTimer);
+  var cityId = state.activeOverlayCityId;
+  if (cityId) {
+    var textarea = document.getElementById("city-card-note");
+    if (textarea) saveNote(cityId, textarea.value);
+  }
+
   state.activeOverlayCityId = null;
   state.stampOrigin = null;
 
@@ -956,17 +996,38 @@ function renderCityCard(cityId) {
   var regionColor = region ? region.color : "#ccc";
   var isVisited = !!state.visitedCities[cityId];
 
+  var svgBookmarkFilled = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>';
+  var svgBookmarkOutlined = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>';
+
   var html = "";
   html += '<div class="city-card">';
-  html += '  <button class="city-card-close" id="city-card-close-btn">&times;</button>';
-  html += '  <h2 class="city-card-name">' + escapeHtml(city.name) + '</h2>';
-  html += '  <p class="city-card-region">' + escapeHtml(regionName) + '</p>';
+
+  html += '  <div class="city-card-header">';
+  html += '    <div class="city-card-title-block">';
+  html += '      <h2 class="city-card-name">' + escapeHtml(city.name) + '</h2>';
+  html += '      <p class="city-card-region">' + escapeHtml(regionName) + '</p>';
+  html += '    </div>';
+  html += '    <div class="city-card-actions">';
+  if (!isVisited) {
+    if (state.plannedCities[cityId]) {
+      html += '      <button class="city-card-btn-wishlist active" id="city-card-wishlist-btn" style="--region-color:' + regionColor + '">' + svgBookmarkFilled + '</button>';
+    } else {
+      html += '      <button class="city-card-btn-wishlist" id="city-card-wishlist-btn">' + svgBookmarkOutlined + '</button>';
+    }
+  }
+  html += '      <button class="city-card-btn-close" id="city-card-close-btn">&times;</button>';
+  html += '    </div>';
+  html += '  </div>';
 
   html += '  <div class="city-card-stamp' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + regionColor + ';color:' + regionColor : 'color:#ccc') + '">';
   html += createStampSVG(city.region);
   html += '  </div>';
 
   html += '  <p class="city-card-description">' + escapeHtml(city.description) + '</p>';
+
+  var noteValue = state.cityNotes[cityId] || "";
+  var notePlaceholder = isVisited ? "Впечатления, заметки на память..." : "Что посмотреть, куда зайти...";
+  html += '  <textarea id="city-card-note" class="city-card-note" maxlength="500" placeholder="' + notePlaceholder + '">' + escapeHtml(noteValue) + '</textarea>';
 
   if (isVisited) {
     var visit = state.visitedCities[cityId];
@@ -987,8 +1048,33 @@ function renderCityCard(cityId) {
     var removeBtn = document.getElementById("city-card-remove-btn");
     if (removeBtn) removeBtn.addEventListener("click", function () { removeVisit(cityId); });
   } else {
+    var wishlistBtn = document.getElementById("city-card-wishlist-btn");
+    if (wishlistBtn) wishlistBtn.addEventListener("click", function () { togglePlanned(cityId); });
     var visitBtn = document.getElementById("city-card-visit-btn");
     if (visitBtn) visitBtn.addEventListener("click", function () { openDatePicker(cityId); });
+  }
+
+  var noteEl = document.getElementById("city-card-note");
+  if (noteEl) {
+    noteEl.addEventListener("input", function () {
+      clearTimeout(noteDebounceTimer);
+      noteDebounceTimer = setTimeout(function () {
+        saveNote(cityId, noteEl.value);
+      }, 300);
+    });
+
+    var isStandalone = window.navigator.standalone === true ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    if (isStandalone) {
+      var card = noteEl.closest(".city-card");
+      noteEl.addEventListener("focus", function () {
+        if (card) card.style.paddingBottom = "200px";
+        setTimeout(function () { noteEl.scrollIntoView({ block: "center" }); }, 300);
+      });
+      noteEl.addEventListener("blur", function () {
+        if (card) card.style.paddingBottom = "";
+      });
+    }
   }
 }
 
@@ -1028,6 +1114,12 @@ function confirmVisit(cityId, date) {
   if (isProcessing) return;
   isProcessing = true;
   try {
+    clearTimeout(noteDebounceTimer);
+    var textarea = document.getElementById("city-card-note");
+    if (textarea) saveNote(cityId, textarea.value);
+
+    delete state.plannedCities[cityId];
+
     state.visitedCities[cityId] = { date: date };
     saveState();
     closeDatePicker();
@@ -1046,6 +1138,10 @@ function removeVisit(cityId) {
     delete state.visitedCities[cityId];
     saveState();
     closeCityCard();
+
+    if (state.currentTab === "profile") {
+      renderProfile();
+    }
   } finally {
     setTimeout(function () { isProcessing = false; }, 400);
   }
@@ -1343,6 +1439,21 @@ function init() {
 
   document.getElementById("date-picker-modal").addEventListener("click", function (e) {
     if (e.target === e.currentTarget) closeDatePicker();
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && state.activeOverlayCityId) {
+      clearTimeout(noteDebounceTimer);
+      var textarea = document.getElementById("city-card-note");
+      if (textarea) saveNote(state.activeOverlayCityId, textarea.value);
+    }
+  });
+
+  window.addEventListener("pagehide", function () {
+    if (state.activeOverlayCityId) {
+      var textarea = document.getElementById("city-card-note");
+      if (textarea) saveNote(state.activeOverlayCityId, textarea.value);
+    }
   });
 
   if (!state.onboardingComplete) {
