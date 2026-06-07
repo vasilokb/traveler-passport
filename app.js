@@ -49,59 +49,43 @@ function projectToSVG(lat, lon) {
   return { x: x, y: y };
 }
 
-function renderMap() {
+var mapPointsInitialized = false;
+
+function initMapPoints() {
+  if (mapPointsInitialized) return;
   var pointsLayer = document.getElementById("map-points-layer");
   if (!pointsLayer) return;
 
   pointsLayer.innerHTML = "";
-
-  var filter = state.mapFilter || "all";
-  var totalVisited = Object.keys(state.visitedCities).length;
-  var emptyState = document.getElementById("map-empty-state");
-  var belarusMap = document.getElementById("belarus-map");
-
-  if (filter === "visited" && totalVisited === 0) {
-    if (belarusMap) belarusMap.style.opacity = "0.15";
-    if (emptyState) emptyState.style.display = "block";
-    return;
-  }
-
-  if (belarusMap) belarusMap.style.opacity = "1";
-  if (emptyState) emptyState.style.display = "none";
+  var fragment = document.createDocumentFragment();
 
   CITIES.forEach(function (city) {
-    var isVisited = !!state.visitedCities[city.id];
-    if (filter === "visited" && !isVisited) return;
-
     var pos = projectToSVG(city.lat, city.lon);
-    var region = REGIONS.find(function (r) {
-      return r.id === city.region;
-    });
-    var dotColor = isVisited && region ? region.color : "#ccc";
+    var region = REGIONS.find(function (r) { return r.id === city.region; });
 
     var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     g.setAttribute("class", "map-point");
     g.setAttribute("data-city-id", city.id);
 
-    var hitbox = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle"
-    );
+    var hitbox = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     hitbox.setAttribute("cx", pos.x);
     hitbox.setAttribute("cy", pos.y);
     hitbox.setAttribute("r", "22");
     hitbox.setAttribute("fill", "transparent");
     hitbox.setAttribute("class", "hitbox");
 
-    var dot = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle"
-    );
+    var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     dot.setAttribute("cx", pos.x);
     dot.setAttribute("cy", pos.y);
     dot.setAttribute("r", "7");
-    dot.setAttribute("fill", dotColor);
+    dot.setAttribute("fill", "#ccc");
     dot.setAttribute("class", "dot");
+
+    var flagGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    flagGroup.setAttribute("class", "map-flag");
+    flagGroup.setAttribute("transform", "translate(" + (pos.x + 5) + "," + (pos.y - 10) + ")");
+    flagGroup.setAttribute("display", "none");
+    flagGroup.innerHTML = '<line x1="0" y1="0" x2="0" y2="12" stroke="currentColor" vector-effect="non-scaling-stroke"/><rect x="0" y="0" width="8" height="6" fill="currentColor"/>';
 
     var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("class", "map-label");
@@ -119,11 +103,88 @@ function renderMap() {
 
     g.appendChild(hitbox);
     g.appendChild(dot);
+    g.appendChild(flagGroup);
     g.appendChild(label);
-    pointsLayer.appendChild(g);
+    fragment.appendChild(g);
   });
 
+  pointsLayer.appendChild(fragment);
+  mapPointsInitialized = true;
   updateMapLabels();
+  updateMapMarkers();
+}
+
+function updateMapMarkers() {
+  var pointsLayer = document.getElementById("map-points-layer");
+  if (!pointsLayer) return;
+  var points = pointsLayer.querySelectorAll(".map-point");
+  points.forEach(function (point) {
+    var cityId = point.getAttribute("data-city-id");
+    var city = CITIES.find(function (c) { return c.id === cityId; });
+    if (!city) return;
+    var region = REGIONS.find(function (r) { return r.id === city.region; });
+    var isVisited = !!state.visitedCities[cityId];
+    var isPlanned = !!state.plannedCities[cityId];
+    var dot = point.querySelector("circle.dot");
+    if (dot) {
+      if (isVisited || isPlanned) {
+        dot.setAttribute("fill", region ? region.color : "#ccc");
+      } else {
+        dot.setAttribute("fill", "#ccc");
+      }
+    }
+    var flag = point.querySelector(".map-flag");
+    if (flag) {
+      if (isPlanned && !isVisited) {
+        flag.setAttribute("display", "inline");
+        flag.style.color = region ? region.color : "#ccc";
+      } else {
+        flag.setAttribute("display", "none");
+      }
+    }
+  });
+}
+
+function updateMapFilter() {
+  var pointsLayer = document.getElementById("map-points-layer");
+  if (!pointsLayer) return;
+  var points = pointsLayer.querySelectorAll(".map-point");
+  var filter = state.mapFilter || "all";
+  var visibleCount = 0;
+
+  points.forEach(function (point) {
+    var cityId = point.getAttribute("data-city-id");
+    var city = CITIES.find(function (c) { return c.id === cityId; });
+    var visible = false;
+    if (filter === "all") {
+      visible = true;
+    } else if (filter === "visited") {
+      visible = !!state.visitedCities[cityId];
+    } else if (filter === "planned") {
+      visible = !!state.plannedCities[cityId];
+    }
+    if (visible) {
+      point.classList.remove("map-point-hidden");
+      visibleCount++;
+    } else {
+      point.classList.add("map-point-hidden");
+    }
+  });
+
+  var overlay = document.getElementById("map-empty-overlay");
+  var overlayText = document.getElementById("map-empty-overlay-text");
+  if (overlay && overlayText) {
+    if (visibleCount === 0) {
+      overlay.style.display = "flex";
+      if (filter === "visited") {
+        overlayText.textContent = "Вы пока не отметили ни одного города. Откройте карточку города и нажмите \"Я здесь был\"";
+      } else if (filter === "planned") {
+        overlayText.textContent = "Нет городов в планах. Откройте карточку города и нажмите закладку в шапке";
+      }
+    } else {
+      overlay.style.display = "none";
+    }
+  }
 }
 
 var MAP_ORIG_VB = { x: MAP.viewBoxX, y: MAP.viewBoxY, w: MAP.viewBoxW, h: MAP.viewBoxH };
@@ -397,10 +458,12 @@ const CITIES = [
 const STORAGE_KEY = "travelerPassport";
 
 let state = {
-  currentTab: "catalog",
+  currentTab: "passport",
   travelerName: "Белорусский путешественник",
   onboardingComplete: false,
   visitedCities: {},
+  plannedCities: {},
+  cityNotes: {},
   openedRegions: [],
   activeOverlayCityId: null,
   stampOrigin: null,
@@ -411,7 +474,8 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      state.currentTab = saved.currentTab || "catalog";
+      state.currentTab = saved.currentTab || "passport";
+      if (state.currentTab === "catalog") state.currentTab = "passport";
       if (typeof saved.travelerName === "string" && saved.travelerName.trim()) {
         state.travelerName = saved.travelerName;
       } else {
@@ -434,6 +498,38 @@ function loadState() {
       } else {
         state.visitedCities = {};
       }
+      if (saved.plannedCities && typeof saved.plannedCities === "object" && !Array.isArray(saved.plannedCities)) {
+        var validPlanned = {};
+        var plannedIds = Object.keys(saved.plannedCities);
+        for (var j = 0; j < plannedIds.length; j++) {
+          var pid = plannedIds[j];
+          if (saved.plannedCities[pid] !== true) continue;
+          if (!CITIES.find(function (c) { return c.id === pid; })) continue;
+          validPlanned[pid] = true;
+        }
+        state.plannedCities = validPlanned;
+      } else {
+        state.plannedCities = {};
+      }
+      if (saved.cityNotes && typeof saved.cityNotes === "object" && !Array.isArray(saved.cityNotes)) {
+        var validNotes = {};
+        var noteIds = Object.keys(saved.cityNotes);
+        for (var k = 0; k < noteIds.length; k++) {
+          var nid = noteIds[k];
+          if (typeof saved.cityNotes[nid] !== "string") continue;
+          if (!CITIES.find(function (c) { return c.id === nid; })) continue;
+          validNotes[nid] = saved.cityNotes[nid];
+        }
+        state.cityNotes = validNotes;
+      } else {
+        state.cityNotes = {};
+      }
+      var visitedKeys = Object.keys(state.visitedCities);
+      for (var m = 0; m < visitedKeys.length; m++) {
+        if (state.plannedCities[visitedKeys[m]]) {
+          delete state.plannedCities[visitedKeys[m]];
+        }
+      }
       var needsFix = (typeof saved.travelerName !== "string") ||
         (saved.visitedCities && (typeof saved.visitedCities !== "object" || Array.isArray(saved.visitedCities)));
       if (needsFix) {
@@ -442,15 +538,17 @@ function loadState() {
     }
   } catch (e) {
     state = {
-      currentTab: "catalog",
+      currentTab: "passport",
       travelerName: "Белорусский путешественник",
       onboardingComplete: false,
       visitedCities: {},
+      plannedCities: {},
+      cityNotes: {},
       openedRegions: [],
     };
   }
-  state.catalogFilter = state.catalogFilter || "all";
-  state.catalogSearchQuery = state.catalogSearchQuery || "";
+  state.passportFilter = "all";
+  state.passportSearchQuery = "";
   state.mapFilter = state.mapFilter || "all";
   state.stampOverlayCityId = null;
   state.openedRegions = state.openedRegions || [];
@@ -463,6 +561,8 @@ function saveState() {
       travelerName: state.travelerName,
       onboardingComplete: state.onboardingComplete,
       visitedCities: state.visitedCities,
+      plannedCities: state.plannedCities,
+      cityNotes: state.cityNotes,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) {
@@ -471,6 +571,17 @@ function saveState() {
 }
 
 function switchTab(tabId) {
+  if (state.currentTab === "passport") {
+    state.passportSearchQuery = "";
+    var searchInput = document.getElementById("passport-search");
+    if (searchInput) searchInput.value = "";
+    var allFilterBtns = document.querySelectorAll(".passport-filter-btn");
+    allFilterBtns.forEach(function (b) {
+      b.classList.remove("disabled");
+      b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+    });
+  }
+
   state.currentTab = tabId;
   saveState();
 
@@ -484,16 +595,16 @@ function switchTab(tabId) {
     btn.classList.toggle("active", btn.dataset.tab === tabId);
   });
 
-  if (tabId === "catalog") {
-    renderCatalog();
-  }
-
   if (tabId === "passport") {
     renderPassport();
   }
 
   if (tabId === "map") {
-    renderMap();
+    if (!mapPointsInitialized) {
+      initMapPoints();
+    }
+    updateMapMarkers();
+    updateMapFilter();
   }
 
   if (tabId === "profile") {
@@ -501,101 +612,117 @@ function switchTab(tabId) {
   }
 }
 
-function renderCatalog() {
-  var container = document.getElementById("catalog-list");
-  container.innerHTML = "";
-
-  var query = (state.catalogSearchQuery || "").toLowerCase();
-  var filter = state.catalogFilter || "all";
-
-  var totalVisited = Object.keys(state.visitedCities).length;
-  var totalCities = CITIES.length;
-
-  if (filter === "visited" && totalVisited === 0) {
-    container.innerHTML = '<div class="catalog-empty-state">Здесь появятся города, которые вы посетили. Время отправляться в путь!</div>';
-    return;
-  }
-
-  if (filter === "unvisited" && totalVisited === totalCities) {
-    container.innerHTML = '<div class="catalog-empty-state">Ура! Вы прошли всю Беларусь! Все штампы собраны.</div>';
-    return;
-  }
-
-  var hasAnyCity = false;
-
-  REGIONS.forEach(function (region) {
-    var citiesInRegion = CITIES.filter(function (c) {
-      return c.region === region.id;
-    });
-
-    var filtered = citiesInRegion.filter(function (city) {
-      var isVisited = !!state.visitedCities[city.id];
-      if (filter === "visited" && !isVisited) return false;
-      if (filter === "unvisited" && isVisited) return false;
-      if (query && city.name.toLowerCase().indexOf(query) === -1) return false;
-      return true;
-    });
-
-    if (filtered.length === 0) return;
-
-    hasAnyCity = true;
-
-    var group = document.createElement("div");
-    group.className = "region-group";
-
-    var header = document.createElement("div");
-    header.className = "region-header";
-    header.innerHTML =
-      '<span class="region-dot" style="background:' + region.color + '"></span>' +
-      '<span class="region-name">' + region.name + "</span>";
-    group.appendChild(header);
-
-    filtered.forEach(function (city) {
-      var item = document.createElement("div");
-      item.className = "city-item";
-      item.dataset.cityId = city.id;
-      if (state.visitedCities[city.id]) {
-        item.classList.add("visited");
-      }
-      item.innerHTML =
-        '<span class="city-check"></span>' +
-        '<span class="city-name">' + city.name + "</span>";
-      group.appendChild(item);
-    });
-
-    container.appendChild(group);
-  });
-
-  if (!hasAnyCity && query) {
-    container.innerHTML = '<div class="catalog-empty-state">Ничего не найдено</div>';
-  }
-}
-
 function getTodayLocal() {
   return new Date().toLocaleDateString("sv-SE");
 }
 
-function handleCatalogClick(e) {
-  var item = e.target.closest(".city-item");
-  if (!item) return;
-  var cityId = item.dataset.cityId;
-  if (!cityId) return;
-  openCityCard(cityId);
+function normalizeForSearch(str) {
+  return str
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/і/g, "и")
+    .replace(/ў/g, "в")
+    .replace(/[-\s]/g, "")
+    .trim();
 }
+
+var currentPassportMode = "filter";
 
 function renderPassport() {
   var container = document.getElementById("passport-list");
+  if (!container) return;
   var totalVisited = Object.keys(state.visitedCities).length;
 
   var countEl = document.getElementById("passport-count");
   if (countEl) countEl.textContent = totalVisited + " из " + CITIES.length;
 
+  var newMode = state.passportSearchQuery !== "" ? "search" : "filter";
+
+  function buildHtml() {
+    if (newMode === "search") {
+      return buildSearchResults();
+    }
+    return buildFilterAccordions();
+  }
+
+  if (newMode !== currentPassportMode) {
+    container.style.opacity = "0";
+    setTimeout(function () {
+      container.innerHTML = buildHtml();
+      container.style.opacity = "1";
+    }, 150);
+    currentPassportMode = newMode;
+  } else {
+    container.innerHTML = buildHtml();
+  }
+}
+
+function buildSearchResults() {
+  var query = state.passportSearchQuery;
+  var normalizedQuery = normalizeForSearch(query);
+  var results = [];
+
+  CITIES.forEach(function (city) {
+    if (normalizeForSearch(city.name).includes(normalizedQuery)) {
+      results.push(city);
+    }
+  });
+
+  if (results.length === 0) {
+    return '<div class="passport-search-empty">Ничего не найдено</div>';
+  }
+
+  var html = '<div class="passport-search-results">';
+  results.forEach(function (city) {
+    var region = REGIONS.find(function (r) { return r.id === city.region; });
+    var regionColor = region ? region.color : "#ccc";
+    var isVisited = !!state.visitedCities[city.id];
+    var isPlanned = !!state.plannedCities[city.id];
+
+    var statusIcon = "";
+    if (isVisited) {
+      statusIcon = '<svg width="16" height="16" viewBox="0 0 20 20" fill="#27AE60"><path d="M7.629 14.566l-4.24-4.24 1.414-1.414 2.826 2.826 7.072-7.072 1.414 1.414z"/></svg>';
+    } else if (isPlanned) {
+      statusIcon = '<svg width="16" height="16" viewBox="0 0 20 20" fill="' + regionColor + '">' +
+        '<line x1="3" y1="2" x2="3" y2="16" stroke="' + regionColor + '" stroke-width="1.5"/>' +
+        '<rect x="3" y="2" width="10" height="7" fill="' + regionColor + '"/>' +
+        '</svg>';
+    }
+
+    html += '<div class="passport-search-result" data-city-id="' + city.id + '">';
+    html += '  <div class="passport-search-icon" style="color:' + regionColor + '">' + createStampSVG(city.region) + '</div>';
+    html += '  <span class="passport-search-name">' + escapeHtml(city.name) + '</span>';
+    html += '  <span class="passport-search-status">' + statusIcon + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function buildFilterAccordions() {
+  var filter = state.passportFilter || "all";
   var html = "";
+  var anyRendered = false;
 
   REGIONS.forEach(function (region) {
     var citiesInRegion = CITIES.filter(function (c) { return c.region === region.id; });
     var regionTotal = citiesInRegion.length;
     var regionVisited = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; }).length;
+
+    var filtered;
+    if (filter === "visited") {
+      filtered = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; });
+    } else if (filter === "unvisited") {
+      filtered = citiesInRegion.filter(function (c) { return !state.visitedCities[c.id]; });
+    } else if (filter === "planned") {
+      filtered = citiesInRegion.filter(function (c) { return state.plannedCities[c.id]; });
+    } else {
+      filtered = citiesInRegion;
+    }
+
+    if (filtered.length === 0) return;
+    anyRendered = true;
+
     var isComplete = regionTotal > 0 && regionVisited === regionTotal;
     var isOpen = state.openedRegions.indexOf(region.id) !== -1;
 
@@ -619,7 +746,7 @@ function renderPassport() {
     html += '    <div class="accordion-inner">';
     html += '      <div class="stamps-grid">';
 
-    citiesInRegion.forEach(function (city) {
+    filtered.forEach(function (city) {
       var isVisited = !!state.visitedCities[city.id];
       html += '<div class="stamp-cell' + (isVisited ? ' visited' : '') + '" data-city-id="' + city.id + '">';
       html += '  <div class="stamp-icon' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + region.color + ';color:' + region.color : '') + '">';
@@ -635,10 +762,28 @@ function renderPassport() {
     html += '</div>';
   });
 
-  container.innerHTML = html;
+  if (!anyRendered) {
+    var totalVisited = Object.keys(state.visitedCities).length;
+    if (filter === "planned") {
+      html = '<div class="passport-search-empty">Нет городов в планах. Откройте карточку города и нажмите «Хочу поехать»</div>';
+    } else if (filter === "visited") {
+      html = '<div class="passport-search-empty">Здесь появятся города, которые вы посетите</div>';
+    } else if (filter === "unvisited" && totalVisited === CITIES.length) {
+      html = '<div class="passport-search-empty">Ура! Вы прошли всю Беларусь!</div>';
+    }
+  }
+
+  return html;
 }
 
 function handlePassportClick(e) {
+  var searchResult = e.target.closest(".passport-search-result");
+  if (searchResult) {
+    var srCityId = searchResult.dataset.cityId;
+    if (srCityId) openCityCard(srCityId);
+    return;
+  }
+
   var header = e.target.closest(".accordion-header");
   if (header) {
     var item = header.closest(".accordion-item");
@@ -699,6 +844,7 @@ function renderProfile() {
   var visitedIds = Object.keys(state.visitedCities);
   var totalVisited = visitedIds.length;
   var totalCities = CITIES.length;
+  var totalPlanned = Object.keys(state.plannedCities).filter(function (k) { return state.plannedCities[k] === true; }).length;
 
   var html = "";
 
@@ -729,6 +875,10 @@ function renderProfile() {
   var totalPct = totalCities > 0 ? (totalVisited / totalCities * 100) : 0;
   html += '  <div class="progress-bar-track">';
   html += '    <div class="progress-bar-fill" style="width:' + totalPct + '%;background:#27AE60"></div>';
+  html += '  </div>';
+  html += '  <div class="profile-planned-row">';
+  html += '    <span class="profile-planned-label">В планах</span>';
+  html += '    <span class="profile-planned-count">' + totalPlanned + '</span>';
   html += '  </div>';
   html += '</div>';
 
@@ -834,15 +984,52 @@ function cancelEditName() {
 }
 
 let isProcessing = false;
+var noteDebounceTimer = null;
+
+function togglePlanned(cityId) {
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    if (state.visitedCities[cityId]) return;
+    if (state.plannedCities[cityId]) {
+      delete state.plannedCities[cityId];
+    } else {
+      state.plannedCities[cityId] = true;
+    }
+    saveState();
+    clearTimeout(noteDebounceTimer);
+    noteDebounceTimer = null;
+    renderCityCard(cityId);
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
+    }
+  } finally {
+    setTimeout(function () { isProcessing = false; }, 400);
+  }
+}
+
+function saveNote(cityId, text) {
+  var trimmed = text.trim();
+  if (trimmed) {
+    state.cityNotes[cityId] = trimmed;
+  } else {
+    delete state.cityNotes[cityId];
+  }
+  saveState();
+}
 
 function openCityCard(cityId) {
   if (isProcessing) return;
   isProcessing = true;
   try {
+    clearTimeout(noteDebounceTimer);
+    noteDebounceTimer = null;
+
     var city = CITIES.find(function (c) { return c.id === cityId; });
     if (!city) return;
 
-    var originMap = { catalog: "catalog", passport: "passport", map: "map" };
+    var originMap = { passport: "passport", map: "map" };
     state.stampOrigin = originMap[state.currentTab] || state.currentTab;
     state.activeOverlayCityId = cityId;
 
@@ -856,11 +1043,22 @@ function openCityCard(cityId) {
 }
 
 function closeCityCard() {
+  clearTimeout(noteDebounceTimer);
+  var cityId = state.activeOverlayCityId;
+  if (cityId) {
+    var textarea = document.getElementById("city-card-note");
+    if (textarea) saveNote(cityId, textarea.value);
+  }
+
   state.activeOverlayCityId = null;
   state.stampOrigin = null;
 
   document.getElementById("city-card-overlay").style.display = "none";
   document.getElementById("tab-bar").classList.remove("tab-bar-blocked");
+
+  if (state.currentTab === "passport") {
+    renderPassport();
+  }
 }
 
 function renderCityCard(cityId) {
@@ -872,17 +1070,38 @@ function renderCityCard(cityId) {
   var regionColor = region ? region.color : "#ccc";
   var isVisited = !!state.visitedCities[cityId];
 
+  var svgBookmarkFilled = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>';
+  var svgBookmarkOutlined = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>';
+
   var html = "";
   html += '<div class="city-card">';
-  html += '  <button class="city-card-close" id="city-card-close-btn">&times;</button>';
-  html += '  <h2 class="city-card-name">' + escapeHtml(city.name) + '</h2>';
-  html += '  <p class="city-card-region">' + escapeHtml(regionName) + '</p>';
+
+  html += '  <div class="city-card-header">';
+  html += '    <div class="city-card-title-block">';
+  html += '      <h2 class="city-card-name">' + escapeHtml(city.name) + '</h2>';
+  html += '      <p class="city-card-region">' + escapeHtml(regionName) + '</p>';
+  html += '    </div>';
+  html += '    <div class="city-card-actions">';
+  if (!isVisited) {
+    if (state.plannedCities[cityId]) {
+      html += '      <button class="city-card-btn-wishlist active" id="city-card-wishlist-btn" style="--region-color:' + regionColor + '">' + svgBookmarkFilled + '</button>';
+    } else {
+      html += '      <button class="city-card-btn-wishlist" id="city-card-wishlist-btn">' + svgBookmarkOutlined + '</button>';
+    }
+  }
+  html += '      <button class="city-card-btn-close" id="city-card-close-btn">&times;</button>';
+  html += '    </div>';
+  html += '  </div>';
 
   html += '  <div class="city-card-stamp' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + regionColor + ';color:' + regionColor : 'color:#ccc') + '">';
   html += createStampSVG(city.region);
   html += '  </div>';
 
   html += '  <p class="city-card-description">' + escapeHtml(city.description) + '</p>';
+
+  var noteValue = state.cityNotes[cityId] || "";
+  var notePlaceholder = isVisited ? "Впечатления, заметки на память..." : "Что посмотреть, куда зайти...";
+  html += '  <textarea id="city-card-note" class="city-card-note" maxlength="500" placeholder="' + notePlaceholder + '">' + escapeHtml(noteValue) + '</textarea>';
 
   if (isVisited) {
     var visit = state.visitedCities[cityId];
@@ -903,8 +1122,33 @@ function renderCityCard(cityId) {
     var removeBtn = document.getElementById("city-card-remove-btn");
     if (removeBtn) removeBtn.addEventListener("click", function () { removeVisit(cityId); });
   } else {
+    var wishlistBtn = document.getElementById("city-card-wishlist-btn");
+    if (wishlistBtn) wishlistBtn.addEventListener("click", function () { togglePlanned(cityId); });
     var visitBtn = document.getElementById("city-card-visit-btn");
     if (visitBtn) visitBtn.addEventListener("click", function () { openDatePicker(cityId); });
+  }
+
+  var noteEl = document.getElementById("city-card-note");
+  if (noteEl) {
+    noteEl.addEventListener("input", function () {
+      clearTimeout(noteDebounceTimer);
+      noteDebounceTimer = setTimeout(function () {
+        saveNote(cityId, noteEl.value);
+      }, 300);
+    });
+
+    var isStandalone = window.navigator.standalone === true ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    if (isStandalone) {
+      var card = noteEl.closest(".city-card");
+      noteEl.addEventListener("focus", function () {
+        if (card) card.style.paddingBottom = "200px";
+        setTimeout(function () { noteEl.scrollIntoView({ block: "center" }); }, 300);
+      });
+      noteEl.addEventListener("blur", function () {
+        if (card) card.style.paddingBottom = "";
+      });
+    }
   }
 }
 
@@ -944,12 +1188,22 @@ function confirmVisit(cityId, date) {
   if (isProcessing) return;
   isProcessing = true;
   try {
+    clearTimeout(noteDebounceTimer);
+    var textarea = document.getElementById("city-card-note");
+    if (textarea) saveNote(cityId, textarea.value);
+
+    delete state.plannedCities[cityId];
+
     state.visitedCities[cityId] = { date: date };
     saveState();
     closeDatePicker();
     state.stampOverlayCityId = cityId;
     renderStampOverlay(cityId);
     document.getElementById("stamp-overlay").style.display = "flex";
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
+    }
   } finally {
     setTimeout(function () { isProcessing = false; }, 400);
   }
@@ -962,6 +1216,14 @@ function removeVisit(cityId) {
     delete state.visitedCities[cityId];
     saveState();
     closeCityCard();
+
+    if (state.currentTab === "profile") {
+      renderProfile();
+    }
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
+    }
   } finally {
     setTimeout(function () { isProcessing = false; }, 400);
   }
@@ -977,36 +1239,58 @@ function init() {
     switchTab(btn.dataset.tab);
   });
 
-  var catalogList = document.getElementById("catalog-list");
-  catalogList.addEventListener("click", handleCatalogClick);
-
-  var catalogControls = document.querySelector(".catalog-controls");
-  if (catalogControls) {
-    catalogControls.addEventListener("click", function (e) {
-      var btn = e.target.closest(".filter-btn");
-      if (!btn) return;
-      state.catalogFilter = btn.dataset.filter;
-      document.querySelectorAll(".filter-btn").forEach(function (b) {
-        b.classList.toggle("active", b.dataset.filter === state.catalogFilter);
-      });
-      renderCatalog();
-    });
-
-    var searchInput = document.getElementById("catalog-search");
-    if (searchInput) {
-      var debounceTimer = null;
-      searchInput.addEventListener("input", function (e) {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(function () {
-          state.catalogSearchQuery = e.target.value;
-          renderCatalog();
-        }, 300);
-      });
-    }
-  }
-
   var passportList = document.getElementById("passport-list");
   if (passportList) passportList.addEventListener("click", handlePassportClick);
+
+  var passportControls = document.querySelector(".passport-controls");
+  if (passportControls) {
+    passportControls.addEventListener("click", function (e) {
+      var btn = e.target.closest(".passport-filter-btn");
+      if (!btn) return;
+      if (btn.classList.contains("disabled")) return;
+      state.passportFilter = btn.dataset.filter;
+      document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+      });
+      renderPassport();
+    });
+  }
+
+  var passportSearchInput = document.getElementById("passport-search");
+  var searchDebounceTimer = null;
+  if (passportSearchInput) {
+    passportSearchInput.addEventListener("input", function () {
+      var value = passportSearchInput.value;
+      if (value === "") {
+        clearTimeout(searchDebounceTimer);
+        state.passportSearchQuery = "";
+        renderPassport();
+        document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
+          b.classList.remove("disabled");
+          b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+        });
+        return;
+      }
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(function () {
+        state.passportSearchQuery = value.trim();
+        renderPassport();
+        if (state.passportSearchQuery !== "") {
+          document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
+            b.classList.remove("active");
+            b.classList.add("disabled");
+          });
+        }
+      }, 250);
+    });
+  }
+
+  var passportSearchForm = document.querySelector(".passport-search-form");
+  if (passportSearchForm) {
+    passportSearchForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+    });
+  }
 
   var mapContainer = document.getElementById("map-container");
   if (mapContainer) {
@@ -1030,7 +1314,7 @@ function init() {
       document.querySelectorAll(".map-filter-btn").forEach(function (b) {
         b.classList.toggle("active", b.dataset.mapFilter === state.mapFilter);
       });
-      renderMap();
+      updateMapFilter();
     });
   }
 
@@ -1239,7 +1523,20 @@ function init() {
     if (e.target === e.currentTarget) closeDatePicker();
   });
 
-  renderCatalog();
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && state.activeOverlayCityId) {
+      clearTimeout(noteDebounceTimer);
+      var textarea = document.getElementById("city-card-note");
+      if (textarea) saveNote(state.activeOverlayCityId, textarea.value);
+    }
+  });
+
+  window.addEventListener("pagehide", function () {
+    if (state.activeOverlayCityId) {
+      var textarea = document.getElementById("city-card-note");
+      if (textarea) saveNote(state.activeOverlayCityId, textarea.value);
+    }
+  });
 
   if (!state.onboardingComplete) {
     showOnboarding();
@@ -1249,3 +1546,14 @@ function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  var hasControllerOnLoad = !!navigator.serviceWorker.controller;
+  var updateToastShown = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (hasControllerOnLoad && !updateToastShown) {
+      updateToastShown = true;
+      showToast("Приложение обновлено");
+    }
+  });
+}

@@ -42,115 +42,6 @@ body {
   display: block;
 }
 
-.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: calc(100vh - 56px);
-}
-
-.placeholder p {
-  font-size: 1.25rem;
-  color: #999;
-}
-
-.catalog-header {
-  padding: 20px 0 12px;
-  position: sticky;
-  top: 0;
-  background: #ffffff;
-  z-index: 10;
-}
-
-.catalog-header h1 {
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: #1a1a1a;
-}
-
-.region-group {
-  margin-top: 20px;
-}
-
-.region-group:first-child {
-  margin-top: 4px;
-}
-
-.region-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  margin-bottom: 4px;
-}
-
-.region-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.region-name {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #333;
-}
-
-.city-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 4px;
-  min-height: 44px;
-  cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.15s;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.city-item:active {
-  background-color: #f5f5f5;
-}
-
-.city-check {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid #d0d0d0;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.city-item.visited .city-check {
-  background: #27AE60;
-  border-color: #27AE60;
-}
-
-.city-item.visited .city-check::after {
-  content: "";
-  width: 8px;
-  height: 5px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: rotate(-45deg) translateY(-1px);
-}
-
-.city-name {
-  font-size: 1rem;
-  color: #333;
-  flex: 1;
-}
-
-.city-item.visited .city-name {
-  color: #27AE60;
-  font-weight: 600;
-}
-
 #tab-bar {
   position: fixed;
   bottom: 0;
@@ -200,10 +91,6 @@ body {
 }
 
 @media (hover: hover) {
-  .city-item:hover {
-    background-color: #f5f5f5;
-  }
-
   .tab-btn:hover {
     color: #666;
   }
@@ -534,12 +421,15 @@ body {
   margin-left: 12px;
 }
 
-.passport-header {
-  padding: 20px 0 12px;
+.passport-sticky-header {
   position: sticky;
   top: 0;
   background: #ffffff;
   z-index: 10;
+}
+
+.passport-header {
+  padding: 20px 0 12px;
 }
 
 .passport-header h1 {
@@ -706,6 +596,122 @@ body {
   filter: grayscale(50%);
 }
 
+.passport-controls {
+  padding: 0 0 12px 0;
+}
+
+.passport-search-form {
+  margin-bottom: 8px;
+}
+
+#passport-search {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 16px;
+  font-family: inherit;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+#passport-search:focus {
+  border-color: #27AE60;
+}
+
+.passport-filter-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.passport-filter-btn {
+  flex: 1;
+  min-height: 38px;
+  padding: 8px 4px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #666;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.passport-filter-btn.active {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+
+.passport-filter-btn.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+#passport-list {
+  transition: opacity 150ms ease;
+}
+
+.passport-search-results {
+  padding: 0;
+  margin: 0;
+}
+
+.passport-search-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+
+.passport-search-result:active {
+  background-color: #f5f5f5;
+}
+
+.passport-search-icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+
+.passport-search-icon svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.passport-search-name {
+  flex: 1;
+  font-size: 0.9375rem;
+  color: #333;
+}
+
+.passport-search-status {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.passport-search-empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: #999;
+  font-style: italic;
+}
+
 #city-card-overlay {
   position: fixed;
   top: 0;
@@ -729,31 +735,64 @@ body {
   max-width: 400px;
   width: 100%;
   padding: 20px;
-  position: relative;
-  max-height: calc(100vh - 40px);
+  max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
 }
 
-.city-card-close {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 44px;
-  height: 44px;
+.city-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.city-card-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.city-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.city-card-btn-wishlist,
+.city-card-btn-close {
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: none;
+  border-radius: 50%;
+  background: #f5f5f5;
   border: none;
-  font-size: 1.5rem;
-  color: #999;
   cursor: pointer;
-  border-radius: 8px;
-  transition: background-color 0.15s;
+  transition: all 0.2s;
+  padding: 0;
 }
 
-.city-card-close:active {
-  background: #f0f0f0;
+.city-card-btn-close {
+  font-size: 24px;
+  color: #999;
+  line-height: 1;
+}
+
+.city-card-btn-wishlist {
+  color: #666;
+}
+
+.city-card-btn-wishlist.active {
+  background: color-mix(in srgb, var(--region-color, #27AE60) 12%, transparent);
+  color: var(--region-color, #27AE60);
+}
+
+.city-card-btn-wishlist:active,
+.city-card-btn-close:active {
+  background: #e0e0e0;
 }
 
 .city-card-stamp {
@@ -772,8 +811,7 @@ body {
   font-size: 1.5rem;
   font-weight: 700;
   color: #1a1a1a;
-  margin-bottom: 4px;
-  padding-right: 32px;
+  margin: 0 0 4px 0;
 }
 
 .city-card-region {
@@ -826,6 +864,32 @@ body {
 .city-card-btn-danger {
   background: #fff0f0;
   color: #E74C3C;
+}
+
+.city-card-note {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  line-height: 1.5;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+  background: #fcfcfc;
+  margin-top: 8px;
+  margin-bottom: 24px;
+}
+
+.city-card-note:focus {
+  border-color: #27AE60;
+}
+
+.city-card-note::placeholder {
+  color: #999;
 }
 
 #date-picker-modal {
@@ -906,58 +970,6 @@ body {
 .date-picker-cancel {
   background: #f0f0f0;
   color: #666;
-}
-
-/* Catalog controls */
-.catalog-controls {
-  padding: 0 0 12px;
-  position: sticky;
-  top: 56px;
-  background: #ffffff;
-  z-index: 10;
-}
-
-#catalog-search {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 14px;
-  font-size: 16px;
-  font-family: inherit;
-  border: 2px solid #e0e0e0;
-  border-radius: 10px;
-  outline: none;
-  transition: border-color 0.2s;
-  margin-bottom: 10px;
-}
-
-#catalog-search:focus {
-  border-color: #27AE60;
-}
-
-.filter-tabs {
-  display: flex;
-  gap: 8px;
-}
-
-.filter-btn {
-  flex: 1;
-  min-height: 38px;
-  padding: 8px 12px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-family: inherit;
-  border: 2px solid #e0e0e0;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.filter-btn.active {
-  background: #1a1a1a;
-  border-color: #1a1a1a;
-  color: #ffffff;
 }
 
 /* Map */
@@ -1063,20 +1075,53 @@ body {
   r: 7;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 24px 16px;
-  color: #8e8e93;
+.map-point-hidden {
+  display: none;
+}
+
+.map-empty-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+
+.map-empty-overlay p {
   font-size: 0.9375rem;
+  color: #666;
+  text-align: center;
+  padding: 0 24px;
   line-height: 1.5;
 }
 
-.catalog-empty-state {
-  text-align: center;
-  padding: 32px 16px;
-  color: #8e8e93;
-  font-size: 0.9375rem;
-  line-height: 1.5;
+.map-zoom-controls,
+.map-zoom-btn {
+  z-index: 10;
+}
+
+.profile-planned-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.profile-planned-label {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.profile-planned-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #666;
 }
 
 /* Stamp overlay */
