@@ -510,6 +510,17 @@ function saveState() {
 }
 
 function switchTab(tabId) {
+  if (state.currentTab === "passport") {
+    state.passportSearchQuery = "";
+    var searchInput = document.getElementById("passport-search");
+    if (searchInput) searchInput.value = "";
+    var allFilterBtns = document.querySelectorAll(".passport-filter-btn");
+    allFilterBtns.forEach(function (b) {
+      b.classList.remove("disabled");
+      b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+    });
+  }
+
   state.currentTab = tabId;
   saveState();
 
@@ -540,19 +551,113 @@ function getTodayLocal() {
   return new Date().toLocaleDateString("sv-SE");
 }
 
+function normalizeForSearch(str) {
+  return str
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/і/g, "и")
+    .replace(/ў/g, "в")
+    .replace(/[-\s]/g, "")
+    .trim();
+}
+
+var currentPassportMode = "filter";
+
 function renderPassport() {
   var container = document.getElementById("passport-list");
+  if (!container) return;
   var totalVisited = Object.keys(state.visitedCities).length;
 
   var countEl = document.getElementById("passport-count");
   if (countEl) countEl.textContent = totalVisited + " из " + CITIES.length;
 
+  var newMode = state.passportSearchQuery !== "" ? "search" : "filter";
+
+  function buildHtml() {
+    if (newMode === "search") {
+      return buildSearchResults();
+    }
+    return buildFilterAccordions();
+  }
+
+  if (newMode !== currentPassportMode) {
+    container.style.opacity = "0";
+    setTimeout(function () {
+      container.innerHTML = buildHtml();
+      container.style.opacity = "1";
+    }, 150);
+    currentPassportMode = newMode;
+  } else {
+    container.innerHTML = buildHtml();
+  }
+}
+
+function buildSearchResults() {
+  var query = state.passportSearchQuery;
+  var normalizedQuery = normalizeForSearch(query);
+  var results = [];
+
+  CITIES.forEach(function (city) {
+    if (normalizeForSearch(city.name).includes(normalizedQuery)) {
+      results.push(city);
+    }
+  });
+
+  if (results.length === 0) {
+    return '<div class="passport-search-empty">Ничего не найдено</div>';
+  }
+
+  var html = '<div class="passport-search-results">';
+  results.forEach(function (city) {
+    var region = REGIONS.find(function (r) { return r.id === city.region; });
+    var regionColor = region ? region.color : "#ccc";
+    var isVisited = !!state.visitedCities[city.id];
+    var isPlanned = !!state.plannedCities[city.id];
+
+    var statusIcon = "";
+    if (isVisited) {
+      statusIcon = '<svg width="16" height="16" viewBox="0 0 20 20" fill="#27AE60"><path d="M7.629 14.566l-4.24-4.24 1.414-1.414 2.826 2.826 7.072-7.072 1.414 1.414z"/></svg>';
+    } else if (isPlanned) {
+      statusIcon = '<svg width="16" height="16" viewBox="0 0 20 20" fill="' + regionColor + '">' +
+        '<line x1="3" y1="2" x2="3" y2="16" stroke="' + regionColor + '" stroke-width="1.5"/>' +
+        '<rect x="3" y="2" width="10" height="7" fill="' + regionColor + '"/>' +
+        '</svg>';
+    }
+
+    html += '<div class="passport-search-result" data-city-id="' + city.id + '">';
+    html += '  <div class="passport-search-icon" style="color:' + regionColor + '">' + createStampSVG(city.region) + '</div>';
+    html += '  <span class="passport-search-name">' + escapeHtml(city.name) + '</span>';
+    html += '  <span class="passport-search-status">' + statusIcon + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function buildFilterAccordions() {
+  var filter = state.passportFilter || "all";
   var html = "";
+  var anyRendered = false;
 
   REGIONS.forEach(function (region) {
     var citiesInRegion = CITIES.filter(function (c) { return c.region === region.id; });
     var regionTotal = citiesInRegion.length;
     var regionVisited = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; }).length;
+
+    var filtered;
+    if (filter === "visited") {
+      filtered = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; });
+    } else if (filter === "unvisited") {
+      filtered = citiesInRegion.filter(function (c) { return !state.visitedCities[c.id]; });
+    } else if (filter === "planned") {
+      filtered = citiesInRegion.filter(function (c) { return state.plannedCities[c.id]; });
+    } else {
+      filtered = citiesInRegion;
+    }
+
+    if (filtered.length === 0) return;
+    anyRendered = true;
+
     var isComplete = regionTotal > 0 && regionVisited === regionTotal;
     var isOpen = state.openedRegions.indexOf(region.id) !== -1;
 
@@ -576,7 +681,7 @@ function renderPassport() {
     html += '    <div class="accordion-inner">';
     html += '      <div class="stamps-grid">';
 
-    citiesInRegion.forEach(function (city) {
+    filtered.forEach(function (city) {
       var isVisited = !!state.visitedCities[city.id];
       html += '<div class="stamp-cell' + (isVisited ? ' visited' : '') + '" data-city-id="' + city.id + '">';
       html += '  <div class="stamp-icon' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + region.color + ';color:' + region.color : '') + '">';
@@ -592,10 +697,28 @@ function renderPassport() {
     html += '</div>';
   });
 
-  container.innerHTML = html;
+  if (!anyRendered) {
+    var totalVisited = Object.keys(state.visitedCities).length;
+    if (filter === "planned") {
+      html = '<div class="passport-search-empty">Нет городов в планах. Откройте карточку города и нажмите «Хочу поехать»</div>';
+    } else if (filter === "visited") {
+      html = '<div class="passport-search-empty">Здесь появятся города, которые вы посетите</div>';
+    } else if (filter === "unvisited" && totalVisited === CITIES.length) {
+      html = '<div class="passport-search-empty">Ура! Вы прошли всю Беларусь!</div>';
+    }
+  }
+
+  return html;
 }
 
 function handlePassportClick(e) {
+  var searchResult = e.target.closest(".passport-search-result");
+  if (searchResult) {
+    var srCityId = searchResult.dataset.cityId;
+    if (srCityId) openCityCard(srCityId);
+    return;
+  }
+
   var header = e.target.closest(".accordion-header");
   if (header) {
     var item = header.closest(".accordion-item");
@@ -818,6 +941,10 @@ function closeCityCard() {
 
   document.getElementById("city-card-overlay").style.display = "none";
   document.getElementById("tab-bar").classList.remove("tab-bar-blocked");
+
+  if (state.currentTab === "passport") {
+    renderPassport();
+  }
 }
 
 function renderCityCard(cityId) {
@@ -936,6 +1063,55 @@ function init() {
 
   var passportList = document.getElementById("passport-list");
   if (passportList) passportList.addEventListener("click", handlePassportClick);
+
+  var passportControls = document.querySelector(".passport-controls");
+  if (passportControls) {
+    passportControls.addEventListener("click", function (e) {
+      var btn = e.target.closest(".passport-filter-btn");
+      if (!btn) return;
+      state.passportFilter = btn.dataset.filter;
+      document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+      });
+      renderPassport();
+    });
+  }
+
+  var passportSearchInput = document.getElementById("passport-search");
+  var searchDebounceTimer = null;
+  if (passportSearchInput) {
+    passportSearchInput.addEventListener("input", function () {
+      var value = passportSearchInput.value;
+      if (value === "") {
+        clearTimeout(searchDebounceTimer);
+        state.passportSearchQuery = "";
+        renderPassport();
+        document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
+          b.classList.remove("disabled");
+          b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+        });
+        return;
+      }
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(function () {
+        state.passportSearchQuery = value.trim();
+        renderPassport();
+        if (state.passportSearchQuery !== "") {
+          document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
+            b.classList.remove("active");
+            b.classList.add("disabled");
+          });
+        }
+      }, 250);
+    });
+  }
+
+  var passportSearchForm = document.querySelector(".passport-search-form");
+  if (passportSearchForm) {
+    passportSearchForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+    });
+  }
 
   var mapContainer = document.getElementById("map-container");
   if (mapContainer) {

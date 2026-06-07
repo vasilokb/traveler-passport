@@ -24,21 +24,23 @@
 
   <div id="app">
     <div id="tab-passport" class="tab-content">
-      <header class="passport-header">
-        <h1>Мой паспорт</h1>
-        <div class="passport-progress">
-          <span id="passport-count" class="passport-count">0 из 57</span>
-        </div>
-      </header>
-      <div class="passport-controls">
-        <form class="passport-search-form" onsubmit="return false">
-          <input type="search" id="passport-search" placeholder="Поиск города..." autocomplete="off">
-        </form>
-        <div class="passport-filter-tabs">
-          <button class="passport-filter-btn active" data-filter="all">Все</button>
-          <button class="passport-filter-btn" data-filter="visited">Посещённые</button>
-          <button class="passport-filter-btn" data-filter="unvisited">Непосещённые</button>
-          <button class="passport-filter-btn" data-filter="planned">В планах</button>
+      <div class="passport-sticky-header">
+        <header class="passport-header">
+          <h1>Мой паспорт</h1>
+          <div class="passport-progress">
+            <span id="passport-count" class="passport-count">0 из 57</span>
+          </div>
+        </header>
+        <div class="passport-controls">
+          <form class="passport-search-form">
+            <input type="search" id="passport-search" placeholder="Поиск города..." autocomplete="off">
+          </form>
+          <div class="passport-filter-tabs">
+            <button class="passport-filter-btn active" data-filter="all">Все</button>
+            <button class="passport-filter-btn" data-filter="visited">Посещённые</button>
+            <button class="passport-filter-btn" data-filter="unvisited">Непосещённые</button>
+            <button class="passport-filter-btn" data-filter="planned">В планах</button>
+          </div>
         </div>
       </div>
       <div id="passport-list"></div>
