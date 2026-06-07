@@ -49,59 +49,43 @@ function projectToSVG(lat, lon) {
   return { x: x, y: y };
 }
 
-function renderMap() {
+var mapPointsInitialized = false;
+
+function initMapPoints() {
+  if (mapPointsInitialized) return;
   var pointsLayer = document.getElementById("map-points-layer");
   if (!pointsLayer) return;
 
   pointsLayer.innerHTML = "";
-
-  var filter = state.mapFilter || "all";
-  var totalVisited = Object.keys(state.visitedCities).length;
-  var emptyState = document.getElementById("map-empty-state");
-  var belarusMap = document.getElementById("belarus-map");
-
-  if (filter === "visited" && totalVisited === 0) {
-    if (belarusMap) belarusMap.style.opacity = "0.15";
-    if (emptyState) emptyState.style.display = "block";
-    return;
-  }
-
-  if (belarusMap) belarusMap.style.opacity = "1";
-  if (emptyState) emptyState.style.display = "none";
+  var fragment = document.createDocumentFragment();
 
   CITIES.forEach(function (city) {
-    var isVisited = !!state.visitedCities[city.id];
-    if (filter === "visited" && !isVisited) return;
-
     var pos = projectToSVG(city.lat, city.lon);
-    var region = REGIONS.find(function (r) {
-      return r.id === city.region;
-    });
-    var dotColor = isVisited && region ? region.color : "#ccc";
+    var region = REGIONS.find(function (r) { return r.id === city.region; });
 
     var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     g.setAttribute("class", "map-point");
     g.setAttribute("data-city-id", city.id);
 
-    var hitbox = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle"
-    );
+    var hitbox = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     hitbox.setAttribute("cx", pos.x);
     hitbox.setAttribute("cy", pos.y);
     hitbox.setAttribute("r", "22");
     hitbox.setAttribute("fill", "transparent");
     hitbox.setAttribute("class", "hitbox");
 
-    var dot = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "circle"
-    );
+    var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     dot.setAttribute("cx", pos.x);
     dot.setAttribute("cy", pos.y);
     dot.setAttribute("r", "7");
-    dot.setAttribute("fill", dotColor);
+    dot.setAttribute("fill", "#ccc");
     dot.setAttribute("class", "dot");
+
+    var flagGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    flagGroup.setAttribute("class", "map-flag");
+    flagGroup.setAttribute("transform", "translate(" + (pos.x + 5) + "," + (pos.y - 10) + ")");
+    flagGroup.setAttribute("display", "none");
+    flagGroup.innerHTML = '<line x1="0" y1="0" x2="0" y2="12" stroke="currentColor" vector-effect="non-scaling-stroke"/><rect x="0" y="0" width="8" height="6" fill="currentColor"/>';
 
     var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("class", "map-label");
@@ -119,11 +103,88 @@ function renderMap() {
 
     g.appendChild(hitbox);
     g.appendChild(dot);
+    g.appendChild(flagGroup);
     g.appendChild(label);
-    pointsLayer.appendChild(g);
+    fragment.appendChild(g);
   });
 
+  pointsLayer.appendChild(fragment);
+  mapPointsInitialized = true;
   updateMapLabels();
+  updateMapMarkers();
+}
+
+function updateMapMarkers() {
+  var pointsLayer = document.getElementById("map-points-layer");
+  if (!pointsLayer) return;
+  var points = pointsLayer.querySelectorAll(".map-point");
+  points.forEach(function (point) {
+    var cityId = point.getAttribute("data-city-id");
+    var city = CITIES.find(function (c) { return c.id === cityId; });
+    if (!city) return;
+    var region = REGIONS.find(function (r) { return r.id === city.region; });
+    var isVisited = !!state.visitedCities[cityId];
+    var isPlanned = !!state.plannedCities[cityId];
+    var dot = point.querySelector("circle.dot");
+    if (dot) {
+      if (isVisited || isPlanned) {
+        dot.setAttribute("fill", region ? region.color : "#ccc");
+      } else {
+        dot.setAttribute("fill", "#ccc");
+      }
+    }
+    var flag = point.querySelector(".map-flag");
+    if (flag) {
+      if (isPlanned && !isVisited) {
+        flag.setAttribute("display", "inline");
+        flag.style.color = region ? region.color : "#ccc";
+      } else {
+        flag.setAttribute("display", "none");
+      }
+    }
+  });
+}
+
+function updateMapFilter() {
+  var pointsLayer = document.getElementById("map-points-layer");
+  if (!pointsLayer) return;
+  var points = pointsLayer.querySelectorAll(".map-point");
+  var filter = state.mapFilter || "all";
+  var visibleCount = 0;
+
+  points.forEach(function (point) {
+    var cityId = point.getAttribute("data-city-id");
+    var city = CITIES.find(function (c) { return c.id === cityId; });
+    var visible = false;
+    if (filter === "all") {
+      visible = true;
+    } else if (filter === "visited") {
+      visible = !!state.visitedCities[cityId];
+    } else if (filter === "planned") {
+      visible = !!state.plannedCities[cityId];
+    }
+    if (visible) {
+      point.classList.remove("map-point-hidden");
+      visibleCount++;
+    } else {
+      point.classList.add("map-point-hidden");
+    }
+  });
+
+  var overlay = document.getElementById("map-empty-overlay");
+  var overlayText = document.getElementById("map-empty-overlay-text");
+  if (overlay && overlayText) {
+    if (visibleCount === 0) {
+      overlay.style.display = "flex";
+      if (filter === "visited") {
+        overlayText.textContent = "Вы пока не отметили ни одного города. Откройте карточку города и нажмите \"Я здесь был\"";
+      } else if (filter === "planned") {
+        overlayText.textContent = "Нет городов в планах. Откройте карточку города и нажмите закладку в шапке";
+      }
+    } else {
+      overlay.style.display = "none";
+    }
+  }
 }
 
 var MAP_ORIG_VB = { x: MAP.viewBoxX, y: MAP.viewBoxY, w: MAP.viewBoxW, h: MAP.viewBoxH };
@@ -539,7 +600,11 @@ function switchTab(tabId) {
   }
 
   if (tabId === "map") {
-    renderMap();
+    if (!mapPointsInitialized) {
+      initMapPoints();
+    }
+    updateMapMarkers();
+    updateMapFilter();
   }
 
   if (tabId === "profile") {
@@ -779,6 +844,7 @@ function renderProfile() {
   var visitedIds = Object.keys(state.visitedCities);
   var totalVisited = visitedIds.length;
   var totalCities = CITIES.length;
+  var totalPlanned = Object.keys(state.plannedCities).filter(function (k) { return state.plannedCities[k] === true; }).length;
 
   var html = "";
 
@@ -809,6 +875,10 @@ function renderProfile() {
   var totalPct = totalCities > 0 ? (totalVisited / totalCities * 100) : 0;
   html += '  <div class="progress-bar-track">';
   html += '    <div class="progress-bar-fill" style="width:' + totalPct + '%;background:#27AE60"></div>';
+  html += '  </div>';
+  html += '  <div class="profile-planned-row">';
+  html += '    <span class="profile-planned-label">В планах</span>';
+  html += '    <span class="profile-planned-count">' + totalPlanned + '</span>';
   html += '  </div>';
   html += '</div>';
 
@@ -930,6 +1000,10 @@ function togglePlanned(cityId) {
     clearTimeout(noteDebounceTimer);
     noteDebounceTimer = null;
     renderCityCard(cityId);
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
+    }
   } finally {
     setTimeout(function () { isProcessing = false; }, 400);
   }
@@ -1126,6 +1200,10 @@ function confirmVisit(cityId, date) {
     state.stampOverlayCityId = cityId;
     renderStampOverlay(cityId);
     document.getElementById("stamp-overlay").style.display = "flex";
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
+    }
   } finally {
     setTimeout(function () { isProcessing = false; }, 400);
   }
@@ -1141,6 +1219,10 @@ function removeVisit(cityId) {
 
     if (state.currentTab === "profile") {
       renderProfile();
+    }
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
     }
   } finally {
     setTimeout(function () { isProcessing = false; }, 400);
@@ -1231,8 +1313,7 @@ function init() {
       document.querySelectorAll(".map-filter-btn").forEach(function (b) {
         b.classList.toggle("active", b.dataset.mapFilter === state.mapFilter);
       });
-      if (state.mapFilter === "planned") return;
-      renderMap();
+      updateMapFilter();
     });
   }
 

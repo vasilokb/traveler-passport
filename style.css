@@ -1075,12 +1075,53 @@ body {
   r: 7;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 24px 16px;
-  color: #8e8e93;
+.map-point-hidden {
+  display: none;
+}
+
+.map-empty-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+
+.map-empty-overlay p {
   font-size: 0.9375rem;
+  color: #666;
+  text-align: center;
+  padding: 0 24px;
   line-height: 1.5;
+}
+
+.map-zoom-controls,
+.map-zoom-btn {
+  z-index: 10;
+}
+
+.profile-planned-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.profile-planned-label {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.profile-planned-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #666;
 }
 
 /* Stamp overlay */
