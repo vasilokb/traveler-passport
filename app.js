@@ -464,10 +464,95 @@ let state = {
   visitedCities: {},
   plannedCities: {},
   cityNotes: {},
+  checkedSights: {},
+  milestones: [],
   openedRegions: [],
   activeOverlayCityId: null,
   stampOrigin: null,
 };
+
+function getCityById(cityId) {
+  for (var i = 0; i < CITIES.length; i++) {
+    if (CITIES[i].id === cityId) return CITIES[i];
+  }
+  return null;
+}
+
+function getSightsCount(cityId) {
+  if (typeof SIGHTS === "undefined") return 0;
+  var sights = SIGHTS[cityId];
+  return (sights && sights.length > 0) ? sights.length : 0;
+}
+
+function hasChecklist(cityId) {
+  return getSightsCount(cityId) > 0;
+}
+
+function getCheckedCount(cityId) {
+  if (!state.checkedSights) return 0;
+  var checked = state.checkedSights[cityId];
+  return (checked && Array.isArray(checked)) ? checked.length : 0;
+}
+
+function getCityTier(cityId) {
+  if (!state.visitedCities[cityId]) return null;
+  var sightsCount = getSightsCount(cityId);
+  if (sightsCount === 0) return "bronze";
+  var checkedCount = getCheckedCount(cityId);
+  var ratio = checkedCount / sightsCount;
+  if (ratio >= 1.0) return "gold";
+  if (ratio >= 0.5) return "silver";
+  return "bronze";
+}
+
+function getTierLabel(tier) {
+  if (tier === "gold") return "Золото";
+  if (tier === "silver") return "Серебро";
+  if (tier === "bronze") return "Бронза";
+  return "";
+}
+
+function getTierEmoji(tier) {
+  if (tier === "gold") return "🥇";
+  if (tier === "silver") return "🥈";
+  if (tier === "bronze") return "🥉";
+  return "";
+}
+
+function addMilestone(cityId, tier) {
+  if (tier !== "silver" && tier !== "gold") return;
+  var exists = false;
+  for (var i = 0; i < state.milestones.length; i++) {
+    if (state.milestones[i].cityId === cityId && state.milestones[i].tier === tier) {
+      exists = true;
+      break;
+    }
+  }
+  if (!exists) {
+    state.milestones.push({ cityId: cityId, date: getTodayLocal(), tier: tier });
+  }
+}
+
+function removeMilestone(cityId, tier) {
+  var filtered = [];
+  for (var i = 0; i < state.milestones.length; i++) {
+    var m = state.milestones[i];
+    if (!(m.cityId === cityId && m.tier === tier)) {
+      filtered.push(m);
+    }
+  }
+  state.milestones = filtered;
+}
+
+function removeAllMilestones(cityId) {
+  var filtered = [];
+  for (var i = 0; i < state.milestones.length; i++) {
+    if (state.milestones[i].cityId !== cityId) {
+      filtered.push(state.milestones[i]);
+    }
+  }
+  state.milestones = filtered;
+}
 
 function loadState() {
   try {
@@ -524,12 +609,98 @@ function loadState() {
       } else {
         state.cityNotes = {};
       }
-      var visitedKeys = Object.keys(state.visitedCities);
-      for (var m = 0; m < visitedKeys.length; m++) {
-        if (state.plannedCities[visitedKeys[m]]) {
-          delete state.plannedCities[visitedKeys[m]];
+      // ПОРЯДОК ВАЖЕН: checkedSights должен быть загружен ДО Gold-инварианта (раздел 3.3)
+      // checkedSights
+      if (saved.checkedSights && typeof saved.checkedSights === "object" && !Array.isArray(saved.checkedSights)) {
+        var validChecks = {};
+        var checkIds = Object.keys(saved.checkedSights);
+        for (var ci = 0; ci < checkIds.length; ci++) {
+          var ckey = checkIds[ci];
+          // Город должен существовать в CITIES
+          if (!getCityById(ckey)) continue;
+          // Значение должно быть массивом
+          var arr = saved.checkedSights[ckey];
+          if (!Array.isArray(arr)) continue;
+          // Фильтрация: оставить только валидные и уникальные sightId
+          var validArr = [];
+          if (typeof SIGHTS === "undefined") {
+            // data-sights.js не загружен — доверяем старым данным,
+            // чтобы не стереть прогресс пользователя (Silver/Gold) при оффлайн-запуске.
+            for (var sri = 0; sri < arr.length; sri++) {
+              if (typeof arr[sri] === "string" && validArr.indexOf(arr[sri]) === -1) {
+                validArr.push(arr[sri]);
+              }
+            }
+          } else {
+            // data-sights.js загружен — полная валидация по SIGHTS
+            var sights = SIGHTS[ckey];
+            if (sights) {
+              for (var si = 0; si < arr.length; si++) {
+                if (typeof arr[si] !== "string") continue;
+                if (validArr.indexOf(arr[si]) !== -1) continue;
+                for (var sf = 0; sf < sights.length; sf++) {
+                  if (sights[sf].id === arr[si]) { validArr.push(arr[si]); break; }
+                }
+              }
+            }
+          }
+          if (validArr.length > 0) {
+            validChecks[ckey] = validArr;
+          }
+        }
+        state.checkedSights = validChecks;
+      } else {
+        state.checkedSights = {};
+      }
+      // milestones
+      if (Array.isArray(saved.milestones)) {
+        var validMilestones = [];
+        var dateRe2 = /^\d{4}-\d{2}-\d{2}$/;
+        for (var mi = 0; mi < saved.milestones.length; mi++) {
+          var ms = saved.milestones[mi];
+          if (!ms || typeof ms !== "object") continue;
+          if (typeof ms.cityId !== "string") continue;
+          // Проверка существования города
+          if (!getCityById(ms.cityId)) continue;
+          if (typeof ms.date !== "string" || !dateRe2.test(ms.date)) continue;
+          if (ms.tier !== "silver" && ms.tier !== "gold") continue;
+          // Дедупликация: пропустить если milestone с теми же cityId+tier уже добавлен
+          var msDup = false;
+          for (var md = 0; md < validMilestones.length; md++) {
+            if (validMilestones[md].cityId === ms.cityId && validMilestones[md].tier === ms.tier) {
+              msDup = true;
+              break;
+            }
+          }
+          if (msDup) continue;
+          validMilestones.push({ cityId: ms.cityId, date: ms.date, tier: ms.tier });
+        }
+        state.milestones = validMilestones;
+      } else {
+        state.milestones = [];
+      }
+      // v3-инвариант: Gold-города не могут быть в plannedCities
+      var goldCheckIds = Object.keys(state.plannedCities);
+      for (var gi = 0; gi < goldCheckIds.length; gi++) {
+        if (getCityTier(goldCheckIds[gi]) === "gold") {
+          delete state.plannedCities[goldCheckIds[gi]];
         }
       }
+      // checkedSights имеет смысл только для посещённых городов
+      var checkedIds = Object.keys(state.checkedSights);
+      for (var cui = 0; cui < checkedIds.length; cui++) {
+        if (!state.visitedCities[checkedIds[cui]]) {
+          delete state.checkedSights[checkedIds[cui]];
+        }
+      }
+      // milestones имеют смысл только для посещённых городов
+      var validMs = [];
+      for (var vmi = 0; vmi < state.milestones.length; vmi++) {
+        if (state.visitedCities[state.milestones[vmi].cityId]) {
+          validMs.push(state.milestones[vmi]);
+        }
+      }
+      state.milestones = validMs;
       var needsFix = (typeof saved.travelerName !== "string") ||
         (saved.visitedCities && (typeof saved.visitedCities !== "object" || Array.isArray(saved.visitedCities)));
       if (needsFix) {
@@ -544,6 +715,8 @@ function loadState() {
       visitedCities: {},
       plannedCities: {},
       cityNotes: {},
+      checkedSights: {},
+      milestones: [],
       openedRegions: [],
     };
   }
@@ -563,6 +736,8 @@ function saveState() {
       visitedCities: state.visitedCities,
       plannedCities: state.plannedCities,
       cityNotes: state.cityNotes,
+      checkedSights: state.checkedSights,
+      milestones: state.milestones,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) {
