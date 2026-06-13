@@ -42,6 +42,13 @@ body {
   display: block;
 }
 
+#tab-map.tab-content {
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
 #tab-bar {
   position: fixed;
   bottom: 0;
@@ -507,6 +514,29 @@ body {
   color: #808080;
 }
 
+.capital-block .accordion-header {
+  cursor: default;
+}
+
+.capital-block .accordion-header:active {
+  background-color: transparent;
+  margin: 0;
+  padding: 14px 0;
+}
+
+.capital-tag {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #2980B9;
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+
+.capital-block .stamps-grid {
+  padding-bottom: 14px;
+}
+
 .accordion-count {
   font-size: 0.875rem;
   color: #999;
@@ -588,6 +618,10 @@ body {
 .stamp-cell.visited .stamp-name {
   color: #333;
   font-weight: 500;
+}
+
+.stamp-cell.tier-gold .stamp-icon {
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.4));
 }
 
 .tab-bar-blocked {
@@ -788,6 +822,15 @@ body {
 .city-card-btn-icon.active {
   background: color-mix(in srgb, var(--region-color, #27AE60) 12%, transparent);
   color: var(--region-color, #27AE60);
+}
+
+.city-card-explore-status {
+  font-size: 0.75rem;
+  color: #808080;
+  background: #E8E8E8;
+  padding: 6px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
 }
 
 .city-card-btn-icon:active,
@@ -1197,35 +1240,51 @@ body {
 
 /* Map */
 .map-header {
-  padding: 20px 0 12px;
-  position: sticky;
-  top: 0;
-  background: #ffffff;
-  z-index: 10;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .map-header h1 {
-  font-size: 1.375rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: #1a1a1a;
 }
 
 .map-controls {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  right: 12px;
+  z-index: 20;
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .map-filter-btn {
   flex: 1;
-  min-height: 38px;
-  padding: 8px 12px;
-  font-size: 0.875rem;
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
   font-weight: 600;
   font-family: inherit;
-  border: 2px solid #e0e0e0;
-  border-radius: 10px;
-  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: #666;
   cursor: pointer;
   transition: all 0.2s;
@@ -1233,20 +1292,22 @@ body {
 
 .map-filter-btn.active {
   background: #1a1a1a;
-  border-color: #1a1a1a;
   color: #ffffff;
 }
 
 #map-container {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
+  height: 100%;
   touch-action: none;
   overflow: hidden;
 }
 
 .map-zoom-controls {
   position: absolute;
-  bottom: 16px;
+  bottom: 72px;
   right: 16px;
   display: flex;
   flex-direction: column;
@@ -1279,7 +1340,7 @@ body {
 #map-container svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
 }
 
 .map-point {
@@ -1474,4 +1535,34 @@ body {
     left: 0;
     transform: none;
   }
+}
+
+/* ===== v3 Map markers (Updated to Rings) ===== */
+
+.tier-ring,
+.tier-num,
+.gold-star {
+  display: none;
+}
+
+.dot.dot--hidden {
+  display: none;
+}
+
+.gold-star.marker-visible,
+.tier-ring.marker-visible {
+  display: block;
+}
+
+.tier-num.marker-visible {
+  display: block;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  transform-origin: center;
+}
+
+.map--zoomed .tier-num.marker-visible {
+  opacity: 1;
+  transform: scale(1);
 }

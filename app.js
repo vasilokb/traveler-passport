@@ -1,8 +1,8 @@
 "use strict";
 
 const REGIONS = [
-  { id: "minsk", name: "Минск", color: "#C0C0C0" },
-  { id: "minsk_obl", name: "Минская область", color: "#E74C3C" },
+  { id: "minsk", name: "Минск", color: "#2980B9" },
+  { id: "minsk_obl", name: "Минская", color: "#E74C3C" },
   { id: "brest", name: "Брестская", color: "#3498DB" },
   { id: "grodno", name: "Гродненская", color: "#27AE60" },
   { id: "vitebsk", name: "Витебская", color: "#F39C12" },
@@ -20,11 +20,29 @@ const REGION_ICONS = {
   gomel: '<path d="M38 40 L38 30 L40 28 L40 24 L42 22 L44 22 L44 24 L48 24 L48 22 L52 22 L52 24 L56 24 L56 22 L58 22 L60 24 L60 28 L62 30 L62 40 Z M50 26 L50 36" fill="currentColor"/>',
 };
 
-function createStampSVG(regionId) {
+function createStampSVG(regionId, tier) {
+  tier = tier || "bronze";
   var inner = REGION_ICONS[regionId] || "";
+  var ring = "";
+  var openTag = "";
+  var closeTag = "";
+
+  if (tier === "silver") {
+    ring = '<circle cx="50" cy="50" r="47" fill="none" stroke="#C0C0C0" stroke-width="2.5" opacity="0.8"/>';
+  } else if (tier === "gold") {
+    ring = '<circle cx="50" cy="50" r="47" fill="none" stroke="#FFD700" stroke-width="2.5" opacity="0.6"/>';
+    openTag = '<g style="color:#FFD700">';
+    closeTag = '</g>';
+  }
+
   return '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+    ring +
+    openTag +
+    '<g transform="translate(0, 10)">' +
     '<path d="M50 5 L54 8 L58 6 L61 10 L65 9 L67 13 L71 13 L72 17 L76 18 L76 22 L80 24 L79 28 L82 31 L80 35 L83 38 L80 41 L82 44 L79 47 L80 50 L77 53 L78 56 L74 58 L74 62 L70 63 L69 67 L65 67 L63 71 L59 70 L57 74 L53 72 L50 75 L47 72 L43 74 L41 70 L37 71 L35 67 L31 67 L30 63 L26 62 L26 58 L22 56 L23 53 L20 50 L21 47 L18 44 L20 41 L17 38 L20 35 L18 31 L21 28 L20 24 L24 22 L24 18 L28 17 L29 13 L33 13 L35 9 L39 10 L42 6 L46 8 Z" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.5"/>' +
-    '<g transform="translate(0, 5) scale(1)">' + inner + '</g>' +
+    '<g transform="translate(0, 10)">' + inner + '</g>' +
+    '</g>' +
+    closeTag +
     '</svg>';
 }
 
@@ -49,6 +67,20 @@ function projectToSVG(lat, lon) {
   return { x: x, y: y };
 }
 
+function computeStarPoints(cx, cy, outerR) {
+  var innerR = outerR * 0.382;
+  var pts = [];
+  for (var i = 0; i < 10; i++) {
+    var angle = -Math.PI / 2 + i * Math.PI / 5;
+    var radius = (i % 2 === 0) ? outerR : innerR;
+    pts.push(
+      (cx + radius * Math.cos(angle)).toFixed(1) + "," +
+      (cy + radius * Math.sin(angle)).toFixed(1)
+    );
+  }
+  return pts.join(" ");
+}
+
 var mapPointsInitialized = false;
 
 function initMapPoints() {
@@ -58,36 +90,74 @@ function initMapPoints() {
 
   pointsLayer.innerHTML = "";
   var fragment = document.createDocumentFragment();
+  var svgNS = "http://www.w3.org/2000/svg";
 
   CITIES.forEach(function (city) {
     var pos = projectToSVG(city.lat, city.lon);
-    var region = REGIONS.find(function (r) { return r.id === city.region; });
+    var region = null;
+    for (var ri = 0; ri < REGIONS.length; ri++) {
+      if (REGIONS[ri].id === city.region) { region = REGIONS[ri]; break; }
+    }
 
-    var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    var g = document.createElementNS(svgNS, "g");
     g.setAttribute("class", "map-point");
     g.setAttribute("data-city-id", city.id);
 
-    var hitbox = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    // 1. Hitbox
+    var hitbox = document.createElementNS(svgNS, "circle");
     hitbox.setAttribute("cx", pos.x);
     hitbox.setAttribute("cy", pos.y);
     hitbox.setAttribute("r", "22");
     hitbox.setAttribute("fill", "transparent");
     hitbox.setAttribute("class", "hitbox");
+    g.appendChild(hitbox);
 
-    var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    // 2. Dot
+    var dot = document.createElementNS(svgNS, "circle");
     dot.setAttribute("cx", pos.x);
     dot.setAttribute("cy", pos.y);
     dot.setAttribute("r", "7");
     dot.setAttribute("fill", "#ccc");
     dot.setAttribute("class", "dot");
+    g.appendChild(dot);
 
-    var flagGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    flagGroup.setAttribute("class", "map-flag");
-    flagGroup.setAttribute("transform", "translate(" + (pos.x + 5) + "," + (pos.y - 10) + ")");
-    flagGroup.setAttribute("display", "none");
-    flagGroup.innerHTML = '<line x1="0" y1="0" x2="0" y2="12" stroke="currentColor" vector-effect="non-scaling-stroke"/><rect x="0" y="0" width="8" height="6" fill="currentColor"/>';
+    // 3. Tier ring
+    var tierRing = document.createElementNS(svgNS, "circle");
+    tierRing.setAttribute("cx", pos.x);
+    tierRing.setAttribute("cy", pos.y);
+    tierRing.setAttribute("r", "10");
+    tierRing.setAttribute("fill", "none");
+    tierRing.setAttribute("stroke", "none");
+    tierRing.setAttribute("stroke-width", "2.5");
+    tierRing.setAttribute("vector-effect", "non-scaling-stroke");
+    tierRing.setAttribute("class", "tier-ring");
+    g.appendChild(tierRing);
 
-    var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    // 4. Tier progress number
+    var tierNum = document.createElementNS(svgNS, "text");
+    tierNum.setAttribute("x", pos.x);
+    tierNum.setAttribute("y", pos.y + 22);
+    tierNum.setAttribute("dy", "0.35em");
+    tierNum.setAttribute("text-anchor", "middle");
+    tierNum.setAttribute("font-size", "16");
+    tierNum.setAttribute("font-family", "-apple-system, BlinkMacSystemFont, sans-serif");
+    tierNum.setAttribute("fill", "#333");
+    tierNum.setAttribute("stroke", "#fff");
+    tierNum.setAttribute("stroke-width", "3");
+    tierNum.setAttribute("paint-order", "stroke fill");
+    tierNum.setAttribute("class", "tier-num");
+    tierNum.textContent = "";
+    g.appendChild(tierNum);
+
+    // 5. Gold star
+    var goldStar = document.createElementNS(svgNS, "polygon");
+    goldStar.setAttribute("points", computeStarPoints(pos.x, pos.y, 10));
+    goldStar.setAttribute("fill", "#FFD700");
+    goldStar.setAttribute("class", "gold-star");
+    g.appendChild(goldStar);
+
+    // 6. Label
+    var label = document.createElementNS(svgNS, "text");
     label.setAttribute("class", "map-label");
     label.setAttribute("x", pos.x + 14);
     label.setAttribute("y", pos.y);
@@ -100,11 +170,8 @@ function initMapPoints() {
     label.setAttribute("stroke-width", "3");
     label.setAttribute("paint-order", "stroke fill");
     label.textContent = city.name;
-
-    g.appendChild(hitbox);
-    g.appendChild(dot);
-    g.appendChild(flagGroup);
     g.appendChild(label);
+
     fragment.appendChild(g);
   });
 
@@ -118,29 +185,72 @@ function updateMapMarkers() {
   var pointsLayer = document.getElementById("map-points-layer");
   if (!pointsLayer) return;
   var points = pointsLayer.querySelectorAll(".map-point");
+
   points.forEach(function (point) {
     var cityId = point.getAttribute("data-city-id");
-    var city = CITIES.find(function (c) { return c.id === cityId; });
+    var city = getCityById(cityId);
     if (!city) return;
-    var region = REGIONS.find(function (r) { return r.id === city.region; });
-    var isVisited = !!state.visitedCities[cityId];
-    var isPlanned = !!state.plannedCities[cityId];
-    var dot = point.querySelector("circle.dot");
-    if (dot) {
-      if (isVisited || isPlanned) {
-        dot.setAttribute("fill", region ? region.color : "#ccc");
-      } else {
-        dot.setAttribute("fill", "#ccc");
-      }
+    var region = null;
+    for (var ri = 0; ri < REGIONS.length; ri++) {
+      if (REGIONS[ri].id === city.region) { region = REGIONS[ri]; break; }
     }
-    var flag = point.querySelector(".map-flag");
-    if (flag) {
-      if (isPlanned && !isVisited) {
-        flag.setAttribute("display", "inline");
-        flag.style.color = region ? region.color : "#ccc";
-      } else {
-        flag.setAttribute("display", "none");
+    var regionColor = region ? region.color : "#ccc";
+    var isCapital = city.region === "minsk";
+    var accentColor = isCapital ? "#2980B9" : null;
+
+    var tier = getCityTier(cityId);
+    var isPlanned = !!state.plannedCities[cityId];
+
+    var dot = point.querySelector(".dot");
+    var tierRing = point.querySelector(".tier-ring");
+    var tierNum = point.querySelector(".tier-num");
+    var goldStar = point.querySelector(".gold-star");
+
+    // Reset
+    if (dot) dot.classList.remove("dot--hidden");
+    if (tierRing) {
+      tierRing.classList.remove("marker-visible");
+      tierRing.setAttribute("stroke", "none");
+    }
+    if (tierNum) {
+      tierNum.classList.remove("marker-visible");
+      tierNum.textContent = "";
+      tierNum.setAttribute("fill", "#333");
+    }
+    if (goldStar) goldStar.classList.remove("marker-visible");
+
+    var checkedCount = getCheckedCount(cityId);
+    var totalCount = getSightsCount(cityId);
+
+    if (tier === null) {
+      if (dot) dot.setAttribute("fill", "#ccc");
+      if (isPlanned && tierRing) {
+        tierRing.classList.add("marker-visible");
+        tierRing.setAttribute("stroke", "#333");
       }
+
+    } else if (tier === "bronze") {
+      if (dot) dot.setAttribute("fill", accentColor || regionColor);
+      if (isPlanned && tierRing) {
+        tierRing.classList.add("marker-visible");
+        tierRing.setAttribute("stroke", accentColor || "#CD7F32");
+      }
+
+    } else if (tier === "silver") {
+      if (dot) dot.setAttribute("fill", accentColor || regionColor);
+      if (tierRing) {
+        tierRing.classList.add("marker-visible");
+        tierRing.setAttribute("stroke", accentColor || "#C0C0C0");
+      }
+      if (tierNum) {
+        tierNum.setAttribute("fill", accentColor || "#333");
+        tierNum.textContent = checkedCount + "/" + totalCount;
+        tierNum.classList.add("marker-visible");
+      }
+
+    } else if (tier === "gold") {
+      if (dot) dot.classList.add("dot--hidden");
+      if (goldStar) goldStar.classList.add("marker-visible");
     }
   });
 }
@@ -179,7 +289,7 @@ function updateMapFilter() {
       if (filter === "visited") {
         overlayText.textContent = "Вы пока не отметили ни одного города. Откройте карточку города и нажмите \"Я здесь был\"";
       } else if (filter === "planned") {
-        overlayText.textContent = "Нет городов в планах. Откройте карточку города и нажмите закладку в шапке";
+        overlayText.textContent = "Нет городов в планах. Нажмите на иконку закладки или медали в карточке города, чтобы добавить его сюда.";
       }
     } else {
       overlay.style.display = "none";
@@ -231,6 +341,7 @@ function updateMapLabels() {
   if (labels.length === 0) return;
 
   var zoomLevel = MAP_ORIG_VB.w / mapViewBox.w;
+  svg.classList.toggle("map--zoomed", zoomLevel >= 1.8);
 
   if (zoomLevel < 1.8) {
     labels.forEach(function (l) { l.setAttribute("visibility", "hidden"); });
@@ -306,7 +417,7 @@ function renderStampOverlay(cityId) {
     '  <div class="stamp-card-icon" style="color:' +
     regionColor +
     '">' +
-    createStampSVG(city.region) +
+    createStampSVG(city.region, getCityTier(cityId)) +
     "</div>";
   html +=
     '  <div class="stamp-card-city">' + escapeHtml(city.name) + "</div>";
@@ -499,9 +610,8 @@ function getCityTier(cityId) {
   var sightsCount = getSightsCount(cityId);
   if (sightsCount === 0) return "bronze";
   var checkedCount = getCheckedCount(cityId);
-  var ratio = checkedCount / sightsCount;
-  if (ratio >= 1.0) return "gold";
-  if (ratio >= 0.5) return "silver";
+  if (checkedCount >= sightsCount) return "gold";
+  if (checkedCount > 0) return "silver";
   return "bronze";
 }
 
@@ -686,6 +796,12 @@ function loadState() {
           delete state.plannedCities[goldCheckIds[gi]];
         }
       }
+      // v3-инвариант: Silver-города ВСЕГДА в plannedCities (авто-фокус)
+      for (var si2 = 0; si2 < CITIES.length; si2++) {
+        if (getCityTier(CITIES[si2].id) === "silver") {
+          state.plannedCities[CITIES[si2].id] = true;
+        }
+      }
       // checkedSights имеет смысл только для посещённых городов
       var checkedIds = Object.keys(state.checkedSights);
       for (var cui = 0; cui < checkedIds.length; cui++) {
@@ -865,7 +981,7 @@ function buildSearchResults() {
     }
 
     html += '<div class="passport-search-result" data-city-id="' + city.id + '">';
-    html += '  <div class="passport-search-icon" style="color:' + regionColor + '">' + createStampSVG(city.region) + '</div>';
+    html += '  <div class="passport-search-icon" style="color:' + regionColor + '">' + createStampSVG(city.region, getCityTier(city.id)) + '</div>';
     html += '  <span class="passport-search-name">' + escapeHtml(city.name) + '</span>';
     html += '  <span class="passport-search-status">' + statusIcon + '</span>';
     html += '</div>';
@@ -898,20 +1014,44 @@ function buildFilterAccordions() {
     if (filtered.length === 0) return;
     anyRendered = true;
 
-    var isComplete = regionTotal > 0 && regionVisited === regionTotal;
     var isOpen = state.openedRegions.indexOf(region.id) !== -1;
+    var isCapital = region.id === "minsk";
 
-    html += '<div class="accordion-item' + (isOpen ? ' open' : '') + '" data-region-id="' + region.id + '">';
+    if (isCapital) {
+      var capCity = filtered[0];
+      var capTier = getCityTier(capCity.id);
+      var capVisited = !!state.visitedCities[capCity.id];
+
+      html += '<div class="accordion-item capital-block">';
+      html += '  <div class="accordion-header">';
+      html += '    <span class="accordion-color-dot" style="background:' + region.color + '"></span>';
+      html += '    <span class="accordion-region-name">' + escapeHtml(capCity.name) + ' <span class="capital-tag">столица</span></span>';
+      html += '  </div>';
+      html += '  <div class="stamps-grid">';
+      html += '    <div class="stamp-cell' + (capVisited ? ' visited' : '') + (capTier ? ' tier-' + capTier : '') + '" data-city-id="' + capCity.id + '">';
+      html += '      <div class="stamp-icon' + (capVisited ? ' visited' : '') + '" style="' + (capVisited ? '--region-color:' + region.color + ';color:' + region.color : '') + '">';
+      html += createStampSVG(region.id, capTier);
+      html += '      </div>';
+      html += '      <span class="stamp-name">' + escapeHtml(capCity.name) + '</span>';
+      html += '    </div>';
+      html += '  </div>';
+      html += '</div>';
+      return;
+    }
+
+    var isComplete = regionTotal > 0 && regionVisited === regionTotal;
+
+    var itemClass = "accordion-item";
+    if (isOpen) itemClass += " open";
+    html += '<div class="' + itemClass + '" data-region-id="' + region.id + '">';
     html += '  <div class="accordion-header">';
+
     html += '    <span class="accordion-color-dot" style="background:' + region.color + '"></span>';
+
     html += '    <span class="accordion-region-name">' + region.name + '</span>';
 
     if (isComplete) {
-      if (region.id === "minsk") {
-        html += '    <span class="accordion-badge badge-silver">Старт</span>';
-      } else {
-        html += '    <span class="accordion-badge badge-gold">Пройден</span>';
-      }
+      html += '    <span class="accordion-badge badge-gold">Пройден</span>';
     }
 
     html += '    <span class="accordion-count">' + regionVisited + ' из ' + regionTotal + '</span>';
@@ -923,9 +1063,10 @@ function buildFilterAccordions() {
 
     filtered.forEach(function (city) {
       var isVisited = !!state.visitedCities[city.id];
-      html += '<div class="stamp-cell' + (isVisited ? ' visited' : '') + '" data-city-id="' + city.id + '">';
+      var cityTier = getCityTier(city.id);
+      html += '<div class="stamp-cell' + (isVisited ? ' visited' : '') + (cityTier ? ' tier-' + cityTier : '') + '" data-city-id="' + city.id + '">';
       html += '  <div class="stamp-icon' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + region.color + ';color:' + region.color : '') + '">';
-      html += createStampSVG(region.id);
+      html += createStampSVG(region.id, cityTier);
       html += '  </div>';
       html += '  <span class="stamp-name">' + escapeHtml(city.name) + '</span>';
       html += '</div>';
@@ -1168,6 +1309,9 @@ function togglePlanned(cityId) {
     var isVisited = !!state.visitedCities[cityId];
     var hasSights = hasChecklist(cityId);
     var tier = getCityTier(cityId);
+    if (tier === "silver") {
+      return;
+    }
     if (tier === "gold" || (isVisited && !hasSights)) {
       if (state.plannedCities[cityId]) {
         delete state.plannedCities[cityId];
@@ -1225,6 +1369,9 @@ function toggleSight(cityId, sightId) {
     var newTier = getCityTier(cityId);
     if (newTier === "gold" && state.plannedCities[cityId]) {
       delete state.plannedCities[cityId];
+    }
+    if (newTier === "silver") {
+      state.plannedCities[cityId] = true;
     }
     if (newTier === "gold") {
       addMilestone(cityId, "silver");
@@ -1426,8 +1573,10 @@ function renderCityCard(cityId) {
   }
   html += '    </div>';
   html += '    <div class="city-card-actions">';
-  var showExploreBtn = !isVisited || (hasSights && (tier === "bronze" || tier === "silver"));
-  if (showExploreBtn) {
+  var showExploreBtn = !isVisited || (hasSights && tier === "bronze");
+  if (isVisited && hasSights && tier === "silver") {
+    html += '      <span class="city-card-explore-status">Город исследуется</span>';
+  } else if (showExploreBtn) {
     if (state.plannedCities[cityId]) {
       html += '      <button class="city-card-btn-icon active" id="city-card-explore-btn" style="--region-color:' + regionColor + '">' + (isVisited ? svgMedalFilled : svgBookmarkFilled) + '</button>';
     } else {
@@ -1441,7 +1590,7 @@ function renderCityCard(cityId) {
   // 3. Штамп (v2 как есть, + CSS-класс ранга для Этапа 4)
   var stampTierClass = tier ? ' stamp-tier-' + tier : '';
   html += '  <div class="city-card-stamp' + (isVisited ? ' visited' : '') + stampTierClass + '" style="' + (isVisited ? '--region-color:' + regionColor + ';color:' + regionColor : 'color:#ccc') + '">';
-  html += createStampSVG(city.region);
+  html += createStampSVG(city.region, tier);
   html += '  </div>';
 
   // 4. Описание
@@ -1646,6 +1795,9 @@ function confirmVisit(cityId, date) {
     delete state.plannedCities[cityId];
 
     state.visitedCities[cityId] = { date: date };
+    if (getCityTier(cityId) === "silver") {
+      state.plannedCities[cityId] = true;
+    }
     saveState();
     closeDatePicker();
     rerenderCityCardPreservingScroll(cityId);
