@@ -1165,7 +1165,21 @@ function togglePlanned(cityId) {
   if (isProcessing) return;
   isProcessing = true;
   try {
-    if (state.visitedCities[cityId]) return;
+    var isVisited = !!state.visitedCities[cityId];
+    var hasSights = hasChecklist(cityId);
+    var tier = getCityTier(cityId);
+    if (tier === "gold" || (isVisited && !hasSights)) {
+      if (state.plannedCities[cityId]) {
+        delete state.plannedCities[cityId];
+        saveState();
+        rerenderCityCardPreservingScroll(cityId);
+        if (mapPointsInitialized) {
+          updateMapMarkers();
+          updateMapFilter();
+        }
+      }
+      return;
+    }
     if (state.plannedCities[cityId]) {
       delete state.plannedCities[cityId];
     } else {
@@ -1173,8 +1187,9 @@ function togglePlanned(cityId) {
     }
     saveState();
     clearTimeout(noteDebounceTimer);
-    noteDebounceTimer = null;
-    renderCityCard(cityId);
+    var noteEl = document.getElementById("city-card-note");
+    if (noteEl) saveNote(cityId, noteEl.value);
+    rerenderCityCardPreservingScroll(cityId);
     if (mapPointsInitialized) {
       updateMapMarkers();
       updateMapFilter();
@@ -1182,6 +1197,135 @@ function togglePlanned(cityId) {
   } finally {
     setTimeout(function () { isProcessing = false; }, 400);
   }
+}
+
+function toggleSight(cityId, sightId) {
+  if (isProcessing) return;
+  isProcessing = true;
+  try {
+    clearTimeout(noteDebounceTimer);
+    var noteTextarea = document.getElementById("city-card-note");
+    if (noteTextarea) saveNote(cityId, noteTextarea.value);
+
+    var oldTier = getCityTier(cityId);
+    var checked = state.checkedSights[cityId];
+    if (!checked) {
+      checked = [];
+      state.checkedSights[cityId] = checked;
+    }
+    var idx = checked.indexOf(sightId);
+    if (idx >= 0) {
+      checked.splice(idx, 1);
+    } else {
+      checked.push(sightId);
+    }
+    if (checked.length === 0) {
+      delete state.checkedSights[cityId];
+    }
+    var newTier = getCityTier(cityId);
+    if (newTier === "gold" && state.plannedCities[cityId]) {
+      delete state.plannedCities[cityId];
+    }
+    if (newTier === "gold") {
+      addMilestone(cityId, "silver");
+      addMilestone(cityId, "gold");
+    } else if (newTier === "silver") {
+      addMilestone(cityId, "silver");
+      if (oldTier === "gold") removeMilestone(cityId, "gold");
+    } else if (newTier === "bronze") {
+      removeMilestone(cityId, "silver");
+      removeMilestone(cityId, "gold");
+    }
+    saveState();
+
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
+    }
+
+    if (oldTier === newTier) {
+      patchChecklistInPlace(cityId, sightId);
+    } else if (newTier === "gold") {
+      patchChecklistInPlace(cityId, sightId);
+      var collapseEl = document.querySelector(".city-card-checklist .checklist-items");
+      if (collapseEl) collapseEl.classList.add("checklist-collapsed");
+      var fadeEls = document.querySelectorAll(".city-card-checklist .checklist-header, .city-card-checklist .checklist-progress-track");
+      for (var fe = 0; fe < fadeEls.length; fe++) {
+        fadeEls[fe].style.opacity = "0";
+      }
+      setTimeout(function () {
+        rerenderCityCardPreservingScroll(cityId);
+      }, 460);
+    } else {
+      rerenderCityCardPreservingScroll(cityId);
+    }
+  } finally {
+    setTimeout(function () { isProcessing = false; }, 560);
+  }
+}
+
+function patchChecklistInPlace(cityId, sightId) {
+  var city = getCityById(cityId);
+  if (!city) return;
+  var region = null;
+  for (var pi = 0; pi < REGIONS.length; pi++) {
+    if (REGIONS[pi].id === city.region) { region = REGIONS[pi]; break; }
+  }
+  var regionColor = region ? region.color : "#ccc";
+
+  var checked = state.checkedSights[cityId] || [];
+  var checkedCount = checked.length;
+  var totalCount = getSightsCount(cityId);
+  var isChecked = checked.indexOf(sightId) !== -1;
+  var tier = getCityTier(cityId);
+
+  var svgCheck = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+  var item = document.querySelector('.checklist-item[data-sight-id="' + sightId + '"]');
+  if (item) {
+    var checkbox = item.querySelector(".checklist-checkbox");
+    var nameEl = item.querySelector(".checklist-item-name");
+    if (isChecked) {
+      if (checkbox) {
+        checkbox.classList.add("checked");
+        checkbox.style.setProperty("--region-color", regionColor);
+        checkbox.innerHTML = svgCheck;
+      }
+      if (nameEl) nameEl.classList.add("checked");
+    } else {
+      if (checkbox) {
+        checkbox.classList.remove("checked");
+        checkbox.style.removeProperty("--region-color");
+        checkbox.innerHTML = "";
+      }
+      if (nameEl) nameEl.classList.remove("checked");
+    }
+  }
+
+  var fillEl = document.querySelector(".checklist-progress-fill");
+  if (fillEl && totalCount > 0) {
+    var pct = Math.round((checkedCount / totalCount) * 100);
+    fillEl.style.width = pct + "%";
+  }
+
+  var countEl = document.querySelector(".checklist-count");
+  if (countEl) {
+    countEl.textContent = "Осмотрено " + checkedCount + " из " + totalCount;
+  }
+
+  var badge = document.querySelector(".city-card-tier-badge");
+  if (badge && tier) {
+    badge.className = "city-card-tier-badge tier-" + tier;
+    badge.textContent = getTierEmoji(tier) + " " + getTierLabel(tier) + " (" + checkedCount + "/" + totalCount + ")";
+  }
+}
+
+function rerenderCityCardPreservingScroll(cityId) {
+  var cardEl = document.querySelector("#city-card-content .city-card");
+  var scrollTop = cardEl ? cardEl.scrollTop : 0;
+  renderCityCard(cityId);
+  var newCardEl = document.querySelector("#city-card-content .city-card");
+  if (newCardEl) newCardEl.scrollTop = scrollTop;
 }
 
 function saveNote(cityId, text) {
@@ -1237,47 +1381,81 @@ function closeCityCard() {
 }
 
 function renderCityCard(cityId) {
-  var city = CITIES.find(function (c) { return c.id === cityId; });
+  var city = getCityById(cityId);
   if (!city) return;
 
-  var region = REGIONS.find(function (r) { return r.id === city.region; });
+  var region = null;
+  for (var ri = 0; ri < REGIONS.length; ri++) {
+    if (REGIONS[ri].id === city.region) { region = REGIONS[ri]; break; }
+  }
   var regionName = region ? region.name : "";
   var regionColor = region ? region.color : "#ccc";
+
   var isVisited = !!state.visitedCities[cityId];
+  var tier = getCityTier(cityId);
+  var hasSights = hasChecklist(cityId);
 
   var svgBookmarkFilled = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>';
   var svgBookmarkOutlined = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>';
+  var svgMedal = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>';
+  var svgMedalFilled = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="none"/></svg>';
+  var svgCheck = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
 
   var html = "";
   html += '<div class="city-card">';
 
+  // 1. Обложка
+  html += '<div class="city-card-cover-wrapper">';
+  html += '  <div class="city-card-cover-placeholder' + (isVisited ? '' : ' unvisited') + '"></div>';
+  if (hasSights) {
+    html += '  <img class="city-card-cover" src="covers/' + cityId + '.webp" onerror="this.style.display=\'none\'" alt="">';
+  }
+  html += '</div>';
+
+  // 2. Заголовок + бейдж ранга
   html += '  <div class="city-card-header">';
   html += '    <div class="city-card-title-block">';
   html += '      <h2 class="city-card-name">' + escapeHtml(city.name) + '</h2>';
   html += '      <p class="city-card-region">' + escapeHtml(regionName) + '</p>';
+  if (isVisited && tier) {
+    html += '      <span class="city-card-tier-badge tier-' + tier + '">' + getTierEmoji(tier) + ' ' + getTierLabel(tier);
+    if (hasSights) {
+      html += ' (' + getCheckedCount(cityId) + '/' + getSightsCount(cityId) + ')';
+    }
+    html += '</span>';
+  }
   html += '    </div>';
   html += '    <div class="city-card-actions">';
-  if (!isVisited) {
+  var showExploreBtn = !isVisited || (hasSights && (tier === "bronze" || tier === "silver"));
+  if (showExploreBtn) {
     if (state.plannedCities[cityId]) {
-      html += '      <button class="city-card-btn-wishlist active" id="city-card-wishlist-btn" style="--region-color:' + regionColor + '">' + svgBookmarkFilled + '</button>';
+      html += '      <button class="city-card-btn-icon active" id="city-card-explore-btn" style="--region-color:' + regionColor + '">' + (isVisited ? svgMedalFilled : svgBookmarkFilled) + '</button>';
     } else {
-      html += '      <button class="city-card-btn-wishlist" id="city-card-wishlist-btn">' + svgBookmarkOutlined + '</button>';
+      html += '      <button class="city-card-btn-icon" id="city-card-explore-btn">' + (isVisited ? svgMedal : svgBookmarkOutlined) + '</button>';
     }
   }
   html += '      <button class="city-card-btn-close" id="city-card-close-btn">&times;</button>';
   html += '    </div>';
   html += '  </div>';
 
-  html += '  <div class="city-card-stamp' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + regionColor + ';color:' + regionColor : 'color:#ccc') + '">';
+  // 3. Штамп (v2 как есть, + CSS-класс ранга для Этапа 4)
+  var stampTierClass = tier ? ' stamp-tier-' + tier : '';
+  html += '  <div class="city-card-stamp' + (isVisited ? ' visited' : '') + stampTierClass + '" style="' + (isVisited ? '--region-color:' + regionColor + ';color:' + regionColor : 'color:#ccc') + '">';
   html += createStampSVG(city.region);
   html += '  </div>';
 
+  // 4. Описание
   html += '  <p class="city-card-description">' + escapeHtml(city.description) + '</p>';
 
+  // 5. Блок «Что посмотреть» (чек-лист / манифест)
+  html += renderChecklist(cityId, hasSights, isVisited, tier, regionColor, svgCheck);
+
+  // 6. Textarea заметок (v2 без изменений)
   var noteValue = state.cityNotes[cityId] || "";
   var notePlaceholder = isVisited ? "Впечатления, заметки на память..." : "Что посмотреть, куда зайти...";
   html += '  <textarea id="city-card-note" class="city-card-note" maxlength="500" placeholder="' + notePlaceholder + '">' + escapeHtml(noteValue) + '</textarea>';
 
+  // 7. Кнопка визита / удаления (v2 без изменений)
   if (isVisited) {
     var visit = state.visitedCities[cityId];
     html += '  <p class="city-card-date">Дата визита: <span>' + formatDateDisplay(visit.date) + '</span></p>';
@@ -1290,6 +1468,8 @@ function renderCityCard(cityId) {
 
   document.getElementById("city-card-content").innerHTML = html;
 
+  // --- Привязка обработчиков ---
+
   var closeBtn = document.getElementById("city-card-close-btn");
   if (closeBtn) closeBtn.addEventListener("click", closeCityCard);
 
@@ -1297,12 +1477,41 @@ function renderCityCard(cityId) {
     var removeBtn = document.getElementById("city-card-remove-btn");
     if (removeBtn) removeBtn.addEventListener("click", function () { removeVisit(cityId); });
   } else {
-    var wishlistBtn = document.getElementById("city-card-wishlist-btn");
-    if (wishlistBtn) wishlistBtn.addEventListener("click", function () { togglePlanned(cityId); });
     var visitBtn = document.getElementById("city-card-visit-btn");
     if (visitBtn) visitBtn.addEventListener("click", function () { openDatePicker(cityId); });
   }
 
+  // Кнопка вишлиста / «Доисследовать» (общая для обоих случаев)
+  var exploreBtn = document.getElementById("city-card-explore-btn");
+  if (exploreBtn) exploreBtn.addEventListener("click", function () { togglePlanned(cityId); });
+
+  // Чек-лист: интерактивные пункты (IIFE для изоляции в ES5)
+  if (hasSights && isVisited) {
+    var items = document.querySelectorAll("#city-card-content .checklist-item");
+    for (var ev_si = 0; ev_si < items.length; ev_si++) {
+      (function (item) {
+        item.addEventListener("click", function () {
+          toggleSight(cityId, item.getAttribute("data-sight-id"));
+        });
+      })(items[ev_si]);
+    }
+  }
+
+  // Аккордеон Золота
+  var goldToggle = document.getElementById("checklist-gold-toggle");
+  if (goldToggle) {
+    goldToggle.addEventListener("click", function () {
+      var body = document.getElementById("checklist-gold-body");
+      if (body) body.classList.toggle("checklist-collapsed");
+      goldToggle.classList.toggle("expanded");
+      var arrow = goldToggle.querySelector(".checklist-gold-arrow");
+      if (arrow) {
+        arrow.textContent = goldToggle.classList.contains("expanded") ? "Свернуть" : "Развернуть";
+      }
+    });
+  }
+
+  // Textarea заметок (v2 без изменений)
   var noteEl = document.getElementById("city-card-note");
   if (noteEl) {
     noteEl.addEventListener("input", function () {
@@ -1325,6 +1534,73 @@ function renderCityCard(cityId) {
       });
     }
   }
+}
+
+function renderChecklist(cityId, hasSights, isVisited, tier, regionColor, svgCheck) {
+  if (!hasSights) {
+    return '<div class="checklist-manifest">Этот город ждёт своих исследователей. Возможно, именно вы откроете его скрытые жемчужины!</div>';
+  }
+
+  var sights = SIGHTS[cityId];
+  var checked = state.checkedSights[cityId] || [];
+  var checkedCount = checked.length;
+  var totalCount = sights.length;
+  var interactive = isVisited;
+  var isGold = tier === "gold";
+
+  var html = "";
+  html += '<div class="city-card-checklist">';
+
+  if (!isGold) {
+    html += '  <div class="checklist-header">';
+    html += '    <span class="checklist-title">Что посмотреть</span>';
+    if (isVisited) {
+      html += '  <span class="checklist-count">Осмотрено ' + checkedCount + ' из ' + totalCount + '</span>';
+    } else {
+      html += '  <span class="checklist-count">' + totalCount + ' ' + getPluralSights(totalCount) + '</span>';
+    }
+    html += '  </div>';
+    if (isVisited) {
+      var pct = Math.round((checkedCount / totalCount) * 100);
+      html += '  <div class="checklist-progress-track"><div class="checklist-progress-fill" style="width:' + pct + '%;background:' + regionColor + '"></div></div>';
+    }
+  }
+
+  if (isGold) {
+    html += '  <div class="checklist-gold-header" id="checklist-gold-toggle" style="border-left:4px solid ' + regionColor + '">';
+    html += '    <span class="checklist-gold-badge">🥇 Золото (' + checkedCount + '/' + totalCount + ')</span>';
+    html += '    <span class="checklist-gold-arrow">Развернуть</span>';
+    html += '  </div>';
+    html += '  <div class="checklist-items checklist-collapsed" id="checklist-gold-body"><div class="checklist-items-inner">';
+  } else {
+    html += '  <div class="checklist-items"><div class="checklist-items-inner">';
+  }
+
+  for (var si = 0; si < sights.length; si++) {
+    var sight = sights[si];
+    var isChecked = checked.indexOf(sight.id) !== -1;
+    var disabled = !interactive ? " disabled" : "";
+    var checkedClass = isChecked ? " checked" : "";
+
+    html += '  <div class="checklist-item' + disabled + '" data-sight-id="' + sight.id + '">';
+    html += '    <div class="checklist-checkbox' + checkedClass + '" style="' + (isChecked ? '--region-color:' + regionColor : '') + '">';
+    if (isChecked) html += svgCheck;
+    html += '    </div>';
+    html += '    <span class="checklist-item-name' + checkedClass + '">' + escapeHtml(sight.name) + '</span>';
+    html += '  </div>';
+  }
+
+  html += '  </div></div>';
+  html += '</div>';
+  return html;
+}
+
+function getPluralSights(n) {
+  var mod10 = n % 10;
+  var mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "достопримечательность";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "достопримечательности";
+  return "достопримечательностей";
 }
 
 function openDatePicker(cityId) {
@@ -1372,9 +1648,7 @@ function confirmVisit(cityId, date) {
     state.visitedCities[cityId] = { date: date };
     saveState();
     closeDatePicker();
-    state.stampOverlayCityId = cityId;
-    renderStampOverlay(cityId);
-    document.getElementById("stamp-overlay").style.display = "flex";
+    rerenderCityCardPreservingScroll(cityId);
     if (mapPointsInitialized) {
       updateMapMarkers();
       updateMapFilter();
@@ -1389,6 +1663,9 @@ function removeVisit(cityId) {
   isProcessing = true;
   try {
     delete state.visitedCities[cityId];
+    delete state.checkedSights[cityId];
+    removeAllMilestones(cityId);
+    delete state.plannedCities[cityId];
     saveState();
     closeCityCard();
 
