@@ -18,3 +18,6 @@ git push https://v4sil-burkinpv1_8G2D18uC8op775E6GR256k9388Cb2O4a1N61Mm6VkZp5R06
 
 
 git remote set-url origin https://v4sil-burkin:pv1_8G2D18uC8op775E6GR256k9388Cb2O4a1N61Mm6VkZp5R06c3137262BlM5407ui_198218694@git.sourcecraft.dev/v4sil-burkin/traveler-passport.git
+
+
+git pull github mvp3 --rebase
