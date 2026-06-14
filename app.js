@@ -31,7 +31,7 @@ function createStampSVG(regionId, tier) {
     ring = '<circle cx="50" cy="50" r="47" fill="none" stroke="#C0C0C0" stroke-width="2.5" opacity="0.8"/>';
   } else if (tier === "gold") {
     ring = '<circle cx="50" cy="50" r="47" fill="none" stroke="#FFD700" stroke-width="2.5" opacity="0.6"/>';
-    openTag = '<g style="color:#FFD700">';
+    openTag = '<g color="#FFD700">';
     closeTag = '</g>';
   }
 
@@ -1155,6 +1155,53 @@ function formatDateDisplay(dateStr) {
   return parts[2] + "." + parts[1] + "." + parts[0];
 }
 
+function generateChronicle() {
+  var entries = [];
+
+  // Визиты (Бронза) — из visitedCities
+  var visitedIds = Object.keys(state.visitedCities);
+  for (var vi = 0; vi < visitedIds.length; vi++) {
+    var cityId = visitedIds[vi];
+    var city = getCityById(cityId);
+    if (!city) continue;
+    var visit = state.visitedCities[cityId];
+    if (!visit || !visit.date) continue;
+    entries.push({
+      date: visit.date,
+      sortName: city.name,
+      label: "Открыт город " + city.name + " (Чернильный штамп)",
+      type: "visit",
+      priority: 0
+    });
+  }
+
+  // Milestone'ы (Silver/Gold) — из state.milestones
+  var milestones = state.milestones || [];
+  for (var mi = 0; mi < milestones.length; mi++) {
+    var m = milestones[mi];
+    var mCity = getCityById(m.cityId);
+    if (!mCity) continue;
+    var emoji = m.tier === "gold" ? "🥇" : "🥈";
+    var tierName = m.tier === "gold" ? "Золотого" : "Серебряного";
+    entries.push({
+      date: m.date,
+      sortName: mCity.name,
+      label: mCity.name + " прокачан до " + tierName + " ордена! " + emoji,
+      type: "milestone",
+      priority: 1
+    });
+  }
+
+  // Сортировка: дата DESC → имя ASC (группировка по городу) → priority ASC (визит раньше milestone)
+  entries.sort(function (a, b) {
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    if (a.sortName !== b.sortName) return a.sortName.localeCompare(b.sortName, "ru");
+    return a.priority - b.priority;
+  });
+
+  return entries;
+}
+
 function renderProfile() {
   var container = document.getElementById("tab-profile");
   var visitedIds = Object.keys(state.visitedCities);
@@ -1196,6 +1243,31 @@ function renderProfile() {
   html += '    <span class="profile-planned-label">В планах</span>';
   html += '    <span class="profile-planned-count">' + totalPlanned + '</span>';
   html += '  </div>';
+  // Панель орденов
+  var goldCount = 0, silverCount = 0, bronzeCount = 0;
+  for (var ci = 0; ci < CITIES.length; ci++) {
+    var cityTier = getCityTier(CITIES[ci].id);
+    if (cityTier === "gold") goldCount++;
+    else if (cityTier === "silver") silverCount++;
+    else if (cityTier === "bronze") bronzeCount++;
+  }
+  html += '  <div class="profile-awards">';
+  html += '    <div class="award-item">';
+  html += '      <span class="award-emoji">🥇</span>';
+  html += '      <span class="award-count">' + goldCount + '</span>';
+  html += '      <span class="award-label">Золотых</span>';
+  html += '    </div>';
+  html += '    <div class="award-item">';
+  html += '      <span class="award-emoji">🥈</span>';
+  html += '      <span class="award-count">' + silverCount + '</span>';
+  html += '      <span class="award-label">Серебряных</span>';
+  html += '    </div>';
+  html += '    <div class="award-item">';
+  html += '      <span class="award-emoji">🥉</span>';
+  html += '      <span class="award-count">' + bronzeCount + '</span>';
+  html += '      <span class="award-label">Бронзовых</span>';
+  html += '    </div>';
+  html += '  </div>';
   html += '</div>';
 
   html += '<div class="profile-divider"></div>';
@@ -1222,28 +1294,20 @@ function renderProfile() {
   html += '<div class="profile-divider"></div>';
 
   html += '<div class="profile-section">';
-  html += '  <div class="chronicle-title">Хроника посещений</div>';
-  if (totalVisited === 0) {
+  html += '  <div class="chronicle-title">Хроника достижений</div>';
+  var chronicleEntries = generateChronicle();
+  if (chronicleEntries.length === 0) {
     html += '  <p class="chronicle-empty">Вы пока не посетили ни одного города. Отправляйтесь в путь!</p>';
   } else {
-    var chronicleItems = [];
-    visitedIds.forEach(function (cityId) {
-      var city = CITIES.find(function (c) { return c.id === cityId; });
-      if (city && state.visitedCities[cityId] && state.visitedCities[cityId].date) {
-        chronicleItems.push({ name: city.name, date: state.visitedCities[cityId].date });
-      }
-    });
-    chronicleItems.sort(function (a, b) {
-      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-      return a.name.localeCompare(b.name, "ru");
-    });
     html += '  <ul class="chronicle-list">';
-    chronicleItems.forEach(function (item) {
-      html += '<li class="chronicle-item">';
-      html += '  <span class="chronicle-city">' + escapeHtml(item.name) + '</span>';
-      html += '  <span class="chronicle-date">' + formatDateDisplay(item.date) + '</span>';
+    for (var cei = 0; cei < chronicleEntries.length; cei++) {
+      var entry = chronicleEntries[cei];
+      var itemClass = entry.type === "milestone" ? "chronicle-item milestone" : "chronicle-item";
+      html += '<li class="' + itemClass + '">';
+      html += '  <span class="chronicle-city">' + escapeHtml(entry.label) + '</span>';
+      html += '  <span class="chronicle-date">' + formatDateDisplay(entry.date) + '</span>';
       html += '</li>';
-    });
+    }
     html += '  </ul>';
   }
   html += '</div>';
