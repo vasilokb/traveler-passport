@@ -1,9 +1,10 @@
-var CACHE_NAME = 'belarus-passport-v2';
+var CACHE_NAME = 'belarus-passport-v3';
 var ASSETS = [
   './',
   'index.html',
   'style.css',
   'app.js',
+  'data-sights.js',
   'manifest.json',
   'icon-192.svg',
   'icon-512.svg'
