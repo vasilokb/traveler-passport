@@ -98,12 +98,6 @@
   </div>
 
   <div id="toast" style="display:none"></div>
-  <script src="data-sights.js"></script>
-  <script src="app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
-    }
-  </script>
+  <script type="module" src="/src/app/main.js"></script>
 </body>
 </html>

@@ -1,0 +1,9 @@
+dist/
+node_modules/
+.vite/
+coverage/
+
+# §0 (безопасность) — секреты не в репозиторий
+conf
+*.conf
+secrets.*
