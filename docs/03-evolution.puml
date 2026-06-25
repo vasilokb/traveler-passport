@@ -1,0 +1,64 @@
+@startuml 03-evolution
+' ===========================================================================
+' ЭВОЛЮЦИЯ (слияние старых 05+07+09): путь монолит → полный FSD
+' ===========================================================================
+
+left to right direction
+skinparam ranksep 26
+skinparam nodesep 14
+skinparam rectangle {
+  BackgroundColor<<mono>>    #FDEDEC
+  BorderColor<<mono>>        #C0392B
+  BackgroundColor<<subset>>  #EBF5FB
+  BorderColor<<subset>>      #2980B9
+  BackgroundColor<<trigger>> #E8F8F5
+  BorderColor<<trigger>>     #27AE60
+  BackgroundColor<<full>>    #FFF8E1
+  BorderColor<<full>>        #B8860B
+}
+skinparam ArrowColor #2C3E50
+skinparam ArrowFontSize 11
+title Эволюция: монолит → MVP → полный FSD\nкаждый шаг оправдан конкретной фичей (✦ = новый слой)
+
+rectangle "**S0 · Сейчас**\n──────────\napp.js = МОНОЛИТ\n(~2000 строк)\nfree · localStorage\nбез бэкенда" as S0 <<mono>>
+
+rectangle "**S1 · MVP** ✦\n──────────\napp\nwidgets  +notes-list, note-editor\nfeatures +notes\nentities +note\nshared\n──────────\n5 слоёв + Vite\n+ фича Заметки\nповедение сохранено\n(кроме новых Заметок)" as S1 <<subset>>
+
+rectangle "**S2 · Платное**\n──────────\napp\nwidgets   +paywall, audio-bar\nfeatures  +purchase, download,\n          audio-player, route-follow\nentities\nshared    +api/revenuecat, api/content\n──────────\nCapacitor + RevenueCat\nCF Workers + R2 + KV\nсервер проверяет права" as S2 <<subset>>
+
+rectangle "**S3 · +pages** ✦\n──────────\napp\n**pages** ← НОВЫЙ СЛОЙ\nwidgets\nfeatures\nentities\nshared\n──────────\nкогда экранов\nстанет много\n(заметки разрастаются)" as S3 <<trigger>>
+
+rectangle "**S4 · Аккаунты**\n──────────\napp\npages\nwidgets    +auth\nfeatures   +auth, +sync\nentities   +user, account\nshared     +api/auth\n──────────\nвосстановление покупок\nкросс-девайс" as S4 <<subset>>
+
+rectangle "**S5 · Команды** ✦\n──────────\napp\n**processes** ← НОВЫЙ\npages\nwidgets    +team, route-collab\nfeatures   +collaboration\nentities   +team\nshared     +realtime\n──────────\n= ПОЛНЫЙ FSD\nrealtime-бэкенд" as S5 <<full>>
+
+S0 --> S1 : разрезать на\nмодули + Заметки
+S1 --> S2 : + аудио/\nмаршруты (paid)
+S2 --> S3 : много экранов\n→ +pages ✦
+S3 --> S4 : синхронизация,\nвосстановление
+S4 --> S5 : совместные\nмаршруты → +processes ✦
+
+note bottom of S1
+  <b>Рефакторинг S1 (фазы):</b>
+  A — Vite + ESM (поведение то же)
+  B — вынести shared + entities (чистые)
+  C — ввести store (автосохранение)
+  D — распилить features + widgets
+  E — фича Заметки
+  F — аудит безопасности + SW
+  ----
+  монолит app.js удаляется
+  в конце фазы D
+end note
+
+legend bottom
+  |= Цвет |= Этап |
+  |<#FDEDEC>| Монолит (сейчас) |
+  |<#EBF5FB>| Подмножество FSD (5 слоёв) |
+  |<#E8F8F5>| Триггер: добавлен слой **pages** |
+  |<#FFF8E1>| Триггер: добавлен **processes** = полный FSD |
+  ====
+  ✦ = новый слой оправдан реальной фичей. Слои добавляются СВЕРХУ, нижние не переписываются.
+endlegend
+
+@enduml

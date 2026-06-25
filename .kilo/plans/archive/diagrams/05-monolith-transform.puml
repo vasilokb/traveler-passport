@@ -1,0 +1,50 @@
+@startuml 05-monolith-transform
+' ===========================================================================
+' Что буквально происходит с монолитом: AS-IS → TO-BE (4 шага)
+' ===========================================================================
+
+skinparam ranksep 55
+skinparam nodesep 22
+skinparam state {
+  BackgroundColor<<now>>  #FDEDEC
+  BorderColor<<now>>      #C0392B
+  BackgroundColor<<core>> #EBF5FB
+  BorderColor<<core>>     #2980B9
+  BackgroundColor<<paid>> #FFF8E1
+  BorderColor<<paid>>     #B8860B
+}
+title Трансформация монолита app.js → FSD-ядро + paid-наслоение\n(каждый шаг — рабочее приложение, free-логика не переписывается)
+
+state "СЕЙЧАС (AS-IS)" as NOW {
+  [*] --> MONO
+  state "app.js — ОДИН файл ~1982 строк\nвся логика в глобальном scope\n(localStorage, без бэкенда)" as MONO <<now>>
+}
+
+state "ШАГ 1. Разрезать на слои\n(поведение НЕ меняется)" as S1 {
+  MONO --> FSD
+  state "FSD-ядро:\nshared / entities / features / widgets / app\n(тот же код, просто по папкам,\nнативный ESM, без сборщика)" as FSD <<core>>
+}
+
+state "ШАГ 2. Обернуть в Capacitor\n(тот же JS → iOS/Android)" as S2 {
+  FSD --> NATIVE
+  state "Нативное приложение\n+ app/platform.js (web vs native)\n+ Capacitor-плагины\n(Purchases, Filesystem)" as NATIVE <<core>>
+}
+
+state "ШАГ 3. Наслоить paid-модули\n(FREE НЕ трогается)" as S3 {
+  NATIVE --> FULL
+  state "FREE слайсы (как есть)\n+ PAID слайсы:\n  features/entitlement  (★ единая точка gating)\n  features/purchase, download, audio-player, route-follow\n  widgets/paywall, audio-bar, route-view\n  shared/api/revenuecat, content\n  app/entitlement, app/platform" as FULL <<paid>>
+}
+
+state "ШАГ 4. Минимальный бэкенд\n(Worker + R2 + KV)" as S4 {
+  FULL --> FINAL
+  state "ЦЕЛЬ:\nfree-чек-листы (localStorage, как сейчас)\n+ paid-аудио (R2 под правом, signed URL)\n+ IAP через RevenueCat\n+ оффлайн (Filesystem)\n+ PWA-веб остаётся free-тиром" as FINAL <<paid>>
+}
+
+note right of S3
+  Монолит НЕ переписывается с нуля.
+  Он становится ядром free-приложения;
+  монетизация НАСЛАИВАЕТСЯ новыми слайсами,
+  а не заменяет существующий код.
+end note
+
+@enduml

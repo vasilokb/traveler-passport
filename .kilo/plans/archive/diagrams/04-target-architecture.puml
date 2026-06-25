@@ -1,0 +1,123 @@
+@startuml 04-target-architecture
+' ===========================================================================
+' ЦЕЛЕВАЯ архитектура (target) — компонентно-контейнерная
+' Принятые решения: Capacitor+IAP / per-city+bundle / RevenueCat /
+' anonymous device / static JSON + R2 / Cloudflare Workers+R2+KV
+' ===========================================================================
+
+skinparam ranksep 42
+skinparam nodesep 26
+skinparam component {
+  BackgroundColor<<free>>    #E8F8F5
+  BorderColor<<free>>        #27AE60
+  BackgroundColor<<paid>>    #FFF8E1
+  BorderColor<<paid>>        #B8860B
+  BackgroundColor<<infra>>   #EBF5FB
+  BorderColor<<infra>>       #2980B9
+  BackgroundColor<<ext>>     #F4F6F7
+  BorderColor<<ext>>         #7F8C8D
+  BackgroundColor<<data>>    #FDEDEC
+  BorderColor<<data>>        #C0392B
+}
+skinparam ArrowColor #2C3E50
+skinparam packageBorderColor #BDC3C7
+title ЦЕЛЕВАЯ архитектура «Паспорт путешественника» с монетизацией\n(free-чек-листы + paid-аудиогиды/маршруты)
+
+' ---------- ВНЕШНИЕ ----------
+package "Внешние сервисы" <<ext>> {
+  component "App Store\nGoogle Play" as STORES
+  component "RevenueCat\n(IAP-верификация,\nentitlement)" as RC
+}
+
+' ---------- НАТИВНОЕ ПРИЛОЖЕНИЕ ----------
+package "Нативные приложения iOS/Android\n(Capacitor-обёртка одного web-core)" {
+  component "Capacitor Runtime\n+ плагины\n(Purchases, Filesystem)" as CAP <<infra>>
+
+  package "Web-core\n(бывший МОНОЛИТ app.js,\nразрезан на FSD-модули)" {
+
+    component "App Shell\nmain.js / store.js" as SHELL <<infra>>
+
+    package "FREE — текущий функционал (не трогаем логику)" <<free>> {
+      component "entities\ncity / region / sight" as ENT
+      component "features\nvisit / checklist /\nstamps / plan / search" as FFREE
+      component "widgets\npassport / map / profile /\ncity-card / onboarding" as WFREE
+    }
+
+    package "PAID — новые модули (наслоение)" <<paid>> {
+      component "app/entitlement.js\napp/platform.js" as APPEG
+      component "features\nentitlement /\npurchase / download /\naudio-player / route-follow" as FPAID
+      component "widgets\npaywall / audio-bar /\nroute-view" as WPAID
+      component "shared/api\nrevenuecat.js / content.js" as APIPAID
+    }
+  }
+
+  database "localStorage\n(free-прогресс)" as LS <<data>>
+  database "Filesystem\n(скачанное аудио,\nnative-only)" as FS <<data>>
+}
+
+' ---------- БЭКЕНД ----------
+package "Бэкенд (минимальный, CF)" <<infra>> {
+  component "Cloudflare Worker\ngated-delivery:\nпроверка права → signed URL" as WORKER
+  component "KV\nкеш entitlement\n(из RC webhooks)" as KV <<data>>
+  database "R2\nаудио .m4a,\nметаданные маршрутов" as R2 <<data>>
+}
+
+' ---------- FREE PWA ----------
+package "PWA-веб (free-тир, отдельно)" <<free>> {
+  component "Тот же web-core,\nно platform=web:\nчек-листы ТОЛЬКО,\nбез paid/плеера" as PWA
+}
+
+' ===== связи покупок =====
+STORES <..> RC : IAP receipts
+CAP --> RC : purchase / getCustomerInfo
+WPAID ..> FPAID : gating-запросы
+APPEG --> RC : снапшот entitlement (UI)
+FPAID --> APIPAID : purchase/restore
+RC --> WORKER : webhook
+WORKER --> KV : кеш entitlement
+WORKER ..> RC : перепроверка права (источник истины)
+
+' ===== доставка контента =====
+FPAID --> APIPAID : getSignedAudioUrl
+APIPAID --> WORKER : HTTPS
+WORKER --> R2 : signed URL
+FPAID --> FS : download (оффлайн)
+
+' ===== внутри web-core =====
+SHELL --> WFREE : render
+SHELL --> WPAID : render (gated)
+WFREE --> FFREE
+FFREE --> ENT
+WPAID --> APPEG : entitlement.getAccess()
+SHELL --> APPEG
+
+' ===== хранилища =====
+SHELL --> LS : free-прогресс (как сейчас)
+CAP --> FS
+
+' ===== PWA =====
+PWA --> LS
+PWA ..> SHELL : тот же код, platform=web
+
+legend right
+  | Цвет | Что это |
+  |<#E8F8F5>| FREE (текущее, не трогается) |
+  |<#FFF8E1>| PAID — новые модули, наслоение |
+  |<#EBF5FB>| Инфраструктура / Capacitor / бэкенд |
+  |<#FDEDEC>| Данные (storage) |
+  |<#F4F6F7>| Внешние сервисы |
+  ====
+  entitlement.getAccess() — единая точка gating-логики.
+  Клиентский entitlement ТОЛЬКО для UI;
+  доступ к аудио авторизует сервер (Worker перепроверяет RC).
+endlegend
+
+note bottom of WORKER
+  <b>Главное правило безопасности:</b>
+  подписанный URL на аудио выдаётся ТОЛЬКО после
+  серверной проверки права через RevenueCat.
+  Клиентский снапшот entitlement — для UI (показать/скрыть paywall),
+  НЕ для авторизации доступа к контенту.
+end note
+
+@enduml

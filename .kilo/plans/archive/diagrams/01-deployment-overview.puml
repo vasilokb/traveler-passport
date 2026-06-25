@@ -1,0 +1,63 @@
+@startuml 01-deployment-overview
+' ===========================================================================
+' Паспорт путешественника по Беларуси — Deployment / High-Level
+' Подтверждение: ПРИЛОЖЕНИЕ — МОНОЛИТ
+' ===========================================================================
+
+skinparam ranksep 45
+skinparam nodesep 30
+skinparam component {
+  BackgroundColor<<monolith>> #FFF8E1
+  BorderColor<<monolith>> #B8860B
+}
+skinparam package {
+  BackgroundColor<<browser>> #F4F6F7
+  BorderColor<<browser>> #95A5A6
+}
+skinparam ArrowColor #34495E
+title Паспорт путешественника — Deployment-обзор\n(монолит: один app.js — вся бизнес-логика)
+
+note as Mono
+  <b>ВЫВОД: это классический фронтенд-монолит.</b>
+  ----
+  • Нет сборки / бандлера / фреймворка / внешних библиотек
+  • Вся логика — в одном файле app.js (~1982 строки) в глобальном scope
+  • Нет разделения на модули (ESM), слои, пакеты или микросервисы
+  • Нет бэкенда — единственное хранилище: localStorage
+  • Сборка = просто 3 тега <script>/<link> в index.html
+  • "Компоненты" на следующей диаграмме — логические группы функций,
+    физически находящихся в одном файле app.js
+end note
+
+package "Браузер (PWA, offline)" <<browser>> {
+
+  package "Монолит приложения" <<monolith>> {
+    file "index.html\n(104 строки)" as HTML
+    file "style.css\n(1389 строк)" as CSS
+    file "app.js\n(1982 строки — ВCЯ логика)" as APP
+    file "data-sights.js\n(82 строки — глобальный объект SIGHTS)" as SIGHTS
+  }
+
+  HTML ..> CSS : <link>
+  HTML ..> SIGHTS : <script> (1-й)
+  HTML ..> APP : <script> (2-й)
+  APP ..> SIGHTS : читает глобал SIGHTS
+
+  component "Service Worker\nsw.js (cache-first)" as SW
+  database "localStorage\nключ 'travelerPassport'" as LS
+
+  component "DOM\n(вкладки, оверлеи, SVG-карта)" as DOM
+}
+
+HTML ..> SW : регистрация
+SW ..> HTML : кэширует
+SW ..> APP : кэширует
+SW ..> SIGHTS : кэширует
+APP <..> DOM : render / events
+APP <..> LS : loadState() / saveState()
+
+cloud "Нет внешних сервисов" as NOSVC {
+}
+NOSVC -[hidden]right-> LS
+
+@enduml

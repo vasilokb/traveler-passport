@@ -1,0 +1,73 @@
+@startuml 03-key-dataflow
+' ===========================================================================
+' Ключевой поток данных: отметить пункт чек-листа (toggleSight)
+' Иллюстрирует связанность монолита: одно действие трогает почти все слои
+' ===========================================================================
+
+skinparam ranksep 38
+skinparam nodesep 18
+skinparam activity {
+  BackgroundColor #FAFAFA
+  BorderColor #2980B9
+  DiamondBackgroundColor #FEF9E7
+  DiamondBorderColor #B8860B
+}
+skinparam ArrowColor #2C3E50
+title Поток данных: toggleSight(cityId, sightId)\n(повышение ранга Bronze → Silver → Gold)
+
+start
+:Пользователь тапает пункт чек-листа в карточке города;
+
+:Проверка **isProcessing** (мьютекс 400мс);
+if (Занято?) then (да)
+  :Игнорировать;
+  stop
+else (нет) endif
+
+:Tier-движок: **getCityTier(cityId)**\n— вычисляет старый ранг\n(читает state.checkedSights + SIGHTS);
+
+:Toggle sightId в **state.checkedSights[cityId]**;
+:**saveState()** → localStorage\n(сериализует 8 полей);
+
+:Tier-движок: **getCityTier** снова\n— новый ранг;
+
+partition "Milestone-менеджер" {
+  if (Bronze→Silver?) then (да)
+    :**addMilestone(cityId,"silver")**;
+  elseif (→Gold?) then (да)
+    :**addMilestone(cityId,"gold")**;
+  elseif (Silver→Bronze?) then (да)
+    :**removeMilestone**;
+  elseif (Gold→Silver?) then (да)
+    :**removeMilestone**;
+  endif
+}
+
+partition "Инварианты v3" {
+  if (Новый ранг = Silver?) then (да)
+    :Принудительно state.plannedCities[city] = true\n(автофокус доисследования);
+  elseif (Новый ранг = Gold?) then (да)
+    :Удалить из plannedCities\n(исследован полностью);
+  endif
+}
+
+partition "Обновление view (без полного re-render)" {
+  :**patchChecklistInPlace()**\n— чекбокс, прогресс-бар, счётчик X/Y, бейдж ранга;
+  if (Переход в Gold?) then (да)
+    :Развернуть золотой аккордеон\n(grid-template-rows: 1fr→0fr)\nили rerenderCityCardPreservingScroll;
+  endif
+  :**updateMapMarkers()**\n— dot/ring/num/star/flag по 7 состояниям;
+}
+
+stop
+
+note right
+  <b>Что видно из схемы:</b>
+  одно действие пользователя проходит через
+  State → Tier → Milestone → Инварианты → 2 рендера (card + map)
+  + запись в localStorage. Всё — вызовы функций внутри одного файла.
+  Любое изменение в любом слое потенциально затрагивает остальные,
+  т.к. границ/контрактов между ними нет.
+end note
+
+@enduml

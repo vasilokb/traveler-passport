@@ -1,0 +1,139 @@
+@startuml 02-target
+' ===========================================================================
+' ЦЕЛЕВАЯ АРХИТЕКТУРА (слияние старых 04+06+08): модули, слои, правило импортов
+' ===========================================================================
+
+skinparam ranksep 50
+skinparam nodesep 20
+skinparam package {
+  FontStyle bold
+}
+skinparam component {
+  BackgroundColor<<app>>     #FFF8E1
+  BorderColor<<app>>         #B8860B
+  BackgroundColor<<widget>>  #EBF5FB
+  BorderColor<<widget>>      #2980B9
+  BackgroundColor<<feature>> #FDEBD0
+  BorderColor<<feature>>     #E67E22
+  BackgroundColor<<entity>>  #E8F8F5
+  BorderColor<<entity>>      #27AE60
+  BackgroundColor<<shared>>  #F4ECF7
+  BorderColor<<shared>>      #8E44AD
+}
+skinparam ArrowColor #2C3E50
+skinparam ArrowFontSize 10
+
+title Цель: слоистая модульная архитектура (FSD)\nправило: импорт только ВНИЗ — сверху вниз
+
+' ---- слой app ----
+package "app" {
+  component "main.js\nточка входа\ninit → switchTab → SW" as APP_MAIN <<app>>
+  component "store.js\nstore + loadState/saveState\n+ миграция" as APP_STORE <<app>>
+}
+
+' ---- слой widgets ----
+package "widgets" {
+  component "passport-list" as W_PASS <<widget>>
+  component "map\n(pan/zoom/pinch\nуехал сюда)" as W_MAP <<widget>>
+  component "profile" as W_PROF <<widget>>
+  component "city-card\n(композит)" as W_CARD <<widget>>
+  component "notes-list" as W_NOTES <<widget>>
+  component "note-editor" as W_NEDIT <<widget>>
+  component "onboarding" as W_ONB <<widget>>
+}
+
+' ---- слой features ----
+package "features" {
+  component "visit\n(отметить визит)" as F_VISIT <<feature>>
+  component "checklist\n(toggleSight)" as F_CHECK <<feature>>
+  component "stamps\n(milestones)" as F_STAMP <<feature>>
+  component "plan\n(вишлист)" as F_PLAN <<feature>>
+  component "search\n(фильтры)" as F_SEARCH <<feature>>
+  component "notes\n(CRUD)" as F_NOTES <<feature>>
+}
+
+' ---- слой entities ----
+package "entities" {
+  component "city\nCITIES, getCityTier\ngetSightsCount" as E_CITY <<entity>>
+  component "region\nREGIONS,\ncreateStampSVG" as E_REGION <<entity>>
+  component "sight\nSIGHTS" as E_SIGHT <<entity>>
+  component "note\nсхема, хелперы" as E_NOTE <<entity>>
+}
+
+' ---- слой shared ----
+package "shared" {
+  component "store-mechanism\ncreateStore()\n(чистый)" as S_STORE <<shared>>
+  component "dom\nescapeHtml, qs/qsa" as S_DOM <<shared>>
+  component "format\nдаты, поиск,\nплюрализация" as S_FORMAT <<shared>>
+  component "config\nmap-config" as S_CONFIG <<shared>>
+}
+
+' ---- импорты (только вниз) ----
+APP_MAIN --> APP_STORE
+APP_MAIN --> W_PASS
+APP_MAIN --> W_MAP
+APP_MAIN --> W_PROF
+APP_MAIN --> W_NOTES
+APP_MAIN --> W_ONB
+
+W_PASS --> F_SEARCH
+W_MAP --> F_SEARCH
+W_CARD --> F_VISIT
+W_CARD --> F_CHECK
+W_CARD --> F_PLAN
+W_CARD --> F_STAMP
+W_NOTES --> F_NOTES
+W_NEDIT --> F_NOTES
+
+F_VISIT --> E_CITY
+F_CHECK --> E_CITY
+F_CHECK --> E_SIGHT
+F_STAMP --> E_CITY
+F_STAMP --> E_REGION
+F_PLAN --> E_CITY
+F_NOTES --> E_NOTE
+
+E_CITY --> S_FORMAT
+E_REGION --> S_CONFIG
+E_NOTE --> S_FORMAT
+APP_STORE --> S_STORE
+APP_STORE --> E_CITY
+W_PASS --> S_DOM
+W_MAP --> S_CONFIG
+
+' ---- будущее (пунктир) ----
+package "будущее (S2+)" {
+  component "paywall\naudio-bar" as W_PAY <<widget>>
+  component "purchase\ndownload\naudio-player" as F_PAY <<feature>>
+  component "api/revenuecat\napi/content" as S_API <<shared>>
+}
+W_PAY ..> F_PAY : добавится\nсверху
+F_PAY ..> S_API
+S_API ..> S_STORE
+
+note right of APP_STORE
+  <b>Состояние = ядро надёжности</b>
+  setState() автосохраняет в localStorage
+  subscribe() — виджеты сами перерисовываются
+  исчезают баги «забыл сохранить / перерисовать»
+end note
+
+note bottom of S_STORE
+  <b>ГЛАВНОЕ ПРАВИЛО:</b>
+  импорт только строго вниз.
+  app → widgets → features → entities → shared
+  Новый модуль добавляется СВЕРХУ —
+  то, что ниже, не ломается.
+end note
+
+legend right
+  |= Слой |= Цвет |= Содержит |
+  | app |<#FFF8E1>| инициализация, store |
+  | widgets |<#EBF5FB>| блоки UI (вкладки, карточки) |
+  | features |<#FDEBD0>| сценарии (отметить, купить) |
+  | entities |<#E8F8F5>| сущности + чистые функции |
+  | shared |<#F4ECF7>| утилиты без знания домена |
+  | будущее | пунктир | платный контент (S2) |
+endlegend
+
+@enduml

@@ -1,0 +1,149 @@
+@startuml 02-internal-components
+' ===========================================================================
+' Внутренние логические "компоненты" app.js (физически — один файл)
+' Стрелка A --> B = A зависит от / вызывает B
+' ===========================================================================
+
+skinparam ranksep 55
+skinparam nodesep 28
+skinparam component {
+  BackgroundColor<<data>>   #E8F8F5
+  BorderColor<<data>>       #1ABC9C
+  BackgroundColor<<logic>>  #EBF5FB
+  BorderColor<<logic>>      #2980B9
+  BackgroundColor<<render>> #FDEBD0
+  BorderColor<<render>>     #E67E22
+  BackgroundColor<<ui>>     #F5EEF8
+  BorderColor<<ui>>         #8E44AD
+  BackgroundColor<<io>>     #FADBD8
+  BorderColor<<io>>         #C0392B
+}
+skinparam ArrowColor #2C3E50
+title app.js — логическое разбиение и зависимости\n(все блоки в одном файле, единый глобальный scope)
+
+' ----- Уровень данных (read-only справочники) -----
+package "Данные (read-only)" <<data>> {
+  component "CITIES\n57 городов\n{id,name,region,lat,lon,desc}" as CITIES
+  component "REGIONS / REGION_ICONS\n7 регионов, цвет, SVG-иконка" as REGIONS
+  component "SIGHTS\n(из data-sights.js)\n15 чек-листов, 49 пунктов" as SIGHTS
+  component "MAP\nпараметры проекции SVG" as MAPCFG
+}
+
+' ----- Чистые утилиты (без состояния) -----
+package "Чистые утилиты" <<logic>> {
+  component "Гео-математика\nprojectToSVG()\ncomputeStarPoints()" as GEO
+  component "Stamp-генератор\ncreateStampSVG(region, tier)\nSVG штампа по рангу" as STAMP
+  component "Утилиты\ngetCityById()\ngetTodayLocal()\nnormalizeForSearch()\nescapeHtml()\nformatDateDisplay()" as UTIL
+}
+
+' ----- Ядро бизнес-логики (stateful) -----
+package "Бизнес-ядро (stateful)" <<logic>> {
+  component "State-модель\nstate{...}\nloadState() / saveState()\n4 инварианта v3" as STATE
+  component "Tier-движок\ngetCityTier()\ngetSightsCount()\ngetCheckedCount()\ngetTierLabel/Emoji()" as TIER
+  component "Milestone-менеджер\nadd/removeMilestone()\nremoveAllMilestones()" as MILE
+}
+
+' ----- Слои рендера -----
+package "Рендер (view)" <<render>> {
+  component "Карта\ninitMapPoints()\nupdateMapMarkers()\nupdateMapFilter()\nzoom/labels" as MAPR
+  component "Паспорт\nrenderPassport()\nbuildSearchResults()\nbuildFilterAccordions()" as PASSR
+  component "Профиль\nrenderProfile()\ngenerateChronicle()\n(ордена, хроника)" as PROFR
+  component "Карточка города\nrenderCityCard()\nrenderChecklist()\ngetPluralSights()" as CARDR
+}
+
+' ----- Действия / мутации -----
+package "Действия (controller)" <<ui>> {
+  component "Визит/Планы\nconfirmVisit()\nremoveVisit()\ntogglePlanned()" as ACTVISIT
+  component "Чек-лист\ntoggleSight()\npatchChecklistInPlace()" as ACTSIGHT
+  component "Мьютекс\nisProcessing (400мс)\nnoteDebounce" as MUTEX
+}
+
+' ----- App shell / оверлеи -----
+package "App shell + Оверлеи" <<ui>> {
+  component "Навигация\nswitchTab()\ninit()\nонбординг" as NAV
+  component "Оверлеи\nrenderStampOverlay()\ngoToCollection()\nshowToast()\nDate-picker" as OVL
+}
+
+' ----- I/O граница -----
+component "DOM (document)" as DOM
+component "localStorage\n'travelerPassport'" as LS
+
+' --- зависимости данных -> утилит ---
+GEO --> MAPCFG
+STAMP --> REGIONS
+UTIL --> CITIES
+
+' --- бизнес-ядро ---
+STATE --> CITIES
+STATE --> SIGHTS
+STATE --> TIER : инварианты\n(Gold∉planned и др.)
+STATE --> LS : load/save
+STATE --> UTIL : getCityById
+TIER --> STATE : читает visitedCities,\ncheckedSights
+TIER --> SIGHTS
+MILE --> STATE
+
+' --- рендер читает ядро + данные ---
+MAPR --> GEO
+MAPR --> TIER
+MAPR --> STATE
+MAPR --> DOM : build/update SVG
+PASSR --> TIER
+PASSR --> STAMP
+PASSR --> STATE
+PASSR --> UTIL
+PASSR --> DOM
+PROFR --> TIER
+PROFR --> MILE
+PROFR --> STATE
+PROFR --> UTIL
+PROFR --> DOM
+CARDR --> TIER
+CARDR --> STAMP
+CARDR --> STATE
+CARDR --> UTIL
+CARDR --> SIGHTS
+CARDR --> DOM
+
+' --- действия мутируют ядро, потом ре-рендер ---
+ACTVISIT --> STATE
+ACTVISIT --> MILE
+ACTVISIT --> TIER
+ACTVISIT --> MAPR : updateMapMarkers()
+ACTVISIT --> PASSR : re-render
+ACTVISIT --> MUTEX
+ACTSIGHT --> TIER
+ACTSIGHT --> MILE
+ACTSIGHT --> STATE
+ACTSIGHT --> CARDR : patchChecklistInPlace()\n/ rerender+scroll
+ACTSIGHT --> MAPR
+ACTSIGHT --> MUTEX
+
+' --- оверлеи ---
+OVL --> STAMP
+OVL --> TIER
+OVL --> PASSR : goToCollection()
+OVL --> DOM
+
+' --- навигация оркестрирует всё ---
+NAV --> STATE
+NAV --> MAPR
+NAV --> PASSR
+NAV --> PROFR
+NAV --> OVL
+NAV --> DOM
+
+legend right
+  | Цвет | Тип |
+  |<#EBF5FB>| Чистая логика / ядро |
+  |<#E8F8F5>| Данные (справочники) |
+  |<#FDEBD0>| Рендер (view) |
+  |<#F5EEF8>| Действия / App shell |
+  |<#FADBD8>| I/O (DOM, localStorage) |
+  ====
+  <b>Главное:</b> жёстких границ между этими блоками нет —
+  все функции в одном глобальном scope app.js и могут вызывать
+  друг друга напрямую. Это и есть природа монолита.
+endlegend
+
+@enduml

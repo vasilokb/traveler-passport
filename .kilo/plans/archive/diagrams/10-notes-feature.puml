@@ -1,0 +1,92 @@
+@startuml 10-notes-feature
+' ===========================================================================
+' Фича «Заметки»: модель данных, экраны, размещение в слоях (5-слойное подмножество)
+' ===========================================================================
+
+skinparam ranksep 40
+skinparam nodesep 20
+skinparam component {
+  BackgroundColor<<app>>     #FFF8E1
+  BorderColor<<app>>         #B8860B
+  BackgroundColor<<widget>>  #EBF5FB
+  BorderColor<<widget>>      #2980B9
+  BackgroundColor<<feature>> #FDEBD0
+  BorderColor<<feature>>     #E67E22
+  BackgroundColor<<entity>>  #E8F8F5
+  BorderColor<<entity>>      #27AE60
+  BackgroundColor<<shared>>  #F4ECF7
+  BorderColor<<shared>>      #8E44AD
+  BackgroundColor<<ui>>      #FDF2E9
+  BorderColor<<ui>>          #D35400
+}
+skinparam ArrowColor #2C3E50
+title Фича «Заметки»: модель данных · экраны · размещение в слоях\n(5-слойное подмножество FSD, без отдельного слоя pages)
+
+' ---------- МОДЕЛЬ ДАННЫХ ----------
+note "**МОДЕЛЬ ДАННЫХ**\n----\nnote = {\n  id:        string\n  title:     string\n  body:      string\n  cityId?:   string  (ссылка на город)\n  tags?:     string[]\n  createdAt: YYYY-MM-DD\n  updatedAt: YYYY-MM-DD\n}\n----\nхранится в **state.notes** = { [id]: note }" as DM
+
+' ---------- ЭКРАНЫ (UI) ----------
+package "ЭКРАНЫ (UI)" {
+  usecase "Вкладка «Заметки»\nсписок + поиск +\nфильтр по городу + «+ новая»" as UI_TAB <<ui>>
+  usecase "Редактор заметки\n(fullscreen overlay):\nзаголовок, текст,\nгород, теги, удалить" as UI_EDIT <<ui>>
+  usecase "Карточка города\nбыстрая заметка (textarea)\n→ ссылка «открыть в редакторе»" as UI_CARD <<ui>>
+}
+
+' ---------- СЛОИ (размещение) ----------
+package "widgets" {
+  component "widgets/notes-list\n(список, поиск,\nпустые состояния)" as W_LIST <<widget>>
+  component "widgets/note-editor\n(title/body/city/tags,\nautosave)" as W_EDIT <<widget>>
+  component "widgets/city-card\n(СУЩЕСТВ.: textarea =\nбыстрая заметка)" as W_CARD <<widget>>
+}
+package "features" {
+  component "features/notes\n(createNote, updateNote,\ndeleteNote, searchNotes,\ngetCityNote) — мутации store" as F_NOTES <<feature>>
+}
+package "entities" {
+  component "entities/note\n(schema, getNoteById,\nlistNotes, isValidNote)" as E_NOTE <<entity>>
+}
+package "shared" {
+  component "lib/format (даты)\nlib/dom (escapeHtml)" as S_LIB <<shared>>
+}
+package "app" {
+  component "store.js\nstate.notes +\nload/save/миграция" as STORE <<app>>
+}
+
+' ---------- потоки ----------
+UI_TAB ..> W_LIST : открывает
+UI_EDIT ..> W_EDIT
+UI_CARD ..> W_CARD
+
+W_LIST --> F_NOTES
+W_EDIT --> F_NOTES
+W_CARD --> F_NOTES
+F_NOTES --> E_NOTE
+F_NOTES --> STORE : read/write\nstate.notes
+STORE --> E_NOTE : валидация\nпри load
+E_NOTE --> S_LIB
+W_LIST --> S_LIB
+W_EDIT --> S_LIB
+
+DM -[hidden]right-> UI_TAB
+
+note bottom of STORE
+  <b>Миграция (один раз, в loadState):</b>
+  старое **cityNotes[cityId] = "текст"**
+  → создаётся **note** { cityId, body: текст, createdAt }
+  после миграции **cityNotes удаляется**.
+  Карточка города далее работает через features/notes.getCityNote(cityId).
+end note
+
+legend right
+  | Слой | Что хранит для Заметок |
+  |<#FFF8E1> app | store: state.notes + миграция cityNotes→notes |
+  |<#EBF5FB> widgets | notes-list (вкладка), note-editor (оверлей), city-card (быстрая) |
+  |<#FDEBD0> features | CRUD + поиск заметок (мутации store) |
+  |<#E8F8F5> entities | сущность note: схема + чистые хелперы |
+  |<#F4ECF7> shared | даты, escapeHtml |
+  ====
+  Слой **pages НЕ подключается** на этом этапе —
+  Заметки = просто 4-я вкладка (виджет), как Паспорт/Карта/Профиль.
+  Полноценный pages созреет позже, когда экранов станет заметно больше.
+endlegend
+
+@enduml

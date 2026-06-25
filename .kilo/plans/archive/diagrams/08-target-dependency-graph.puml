@@ -1,0 +1,130 @@
+@startuml 08-target-dependency-graph
+' ===========================================================================
+' Зависимости модулей ПОСЛЕ рефакторинга (target — "как должно стать")
+' Стрелка A --> B = A импортирует B (только строго вниз по слоям)
+' Это чистый вариант диаграммы 02 (которая показывала хаос монолита)
+' ===========================================================================
+
+skinparam ranksep 50
+skinparam nodesep 24
+skinparam component {
+  BackgroundColor<<app>>     #FFF8E1
+  BorderColor<<app>>         #B8860B
+  BackgroundColor<<widget>>  #EBF5FB
+  BorderColor<<widget>>      #2980B9
+  BackgroundColor<<feature>> #FDEBD0
+  BorderColor<<feature>>     #E67E22
+  BackgroundColor<<entity>>  #E8F8F5
+  BorderColor<<entity>>      #27AE60
+  BackgroundColor<<shared>>  #F4ECF7
+  BorderColor<<shared>>      #8E44AD
+}
+skinparam ArrowColor #2C3E50
+title Зависимости модулей ПОСЛЕ рефакторинга\nоднонаправленные импорты строго вниз\n(чистый вариант схемы 02 — был хаос, станет порядок)
+
+' ----- СЛОЙ app (верх) -----
+package "app" <<app>> {
+  component "main.js" as MAIN
+  component "store.js" as STORE
+}
+
+' ----- СЛОЙ widgets -----
+package "widgets" {
+  component "passport-list" as W_PASS <<widget>>
+  component "map" as W_MAP <<widget>>
+  component "city-card" as W_CARD <<widget>>
+  component "onboarding" as W_ONB <<widget>>
+}
+
+' ----- СЛОЙ features -----
+package "features" {
+  component "visit" as F_VISIT <<feature>>
+  component "checklist" as F_CHECK <<feature>>
+  component "plan" as F_PLAN <<feature>>
+  component "stamps" as F_STAMP <<feature>>
+  component "search" as F_SEARCH <<feature>>
+  component "profile" as F_PROFILE <<feature>>
+}
+
+' ----- СЛОЙ entities -----
+package "entities" {
+  component "city" as E_CITY <<entity>>
+  component "region" as E_REGION <<entity>>
+  component "sight" as E_SIGHT <<entity>>
+}
+
+' ----- СЛОЙ shared (низ) -----
+package "shared" {
+  component "lib/store-mechanism" as S_STORE <<shared>>
+  component "lib/dom" as S_DOM <<shared>>
+  component "lib/format" as S_FMT <<shared>>
+  component "config/map-config" as S_MAP <<shared>>
+}
+
+' --- app ---
+MAIN --> STORE
+MAIN --> W_PASS
+MAIN --> W_MAP
+MAIN --> W_CARD
+MAIN --> W_ONB
+STORE --> S_STORE
+STORE --> E_CITY
+
+' --- widgets → features/entities/shared ---
+W_PASS --> F_SEARCH
+W_PASS --> E_CITY
+W_PASS --> E_REGION
+W_PASS --> S_DOM
+W_MAP --> S_MAP
+W_MAP --> E_CITY
+W_MAP --> S_DOM
+W_CARD --> F_VISIT
+W_CARD --> F_CHECK
+W_CARD --> F_PLAN
+W_CARD --> E_CITY
+W_CARD --> E_REGION
+W_ONB --> S_DOM
+
+' --- features → entities/shared ---
+F_VISIT --> F_STAMP
+F_VISIT --> E_CITY
+F_CHECK --> F_STAMP
+F_CHECK --> E_CITY
+F_PLAN --> E_CITY
+F_STAMP --> E_CITY
+F_STAMP --> E_REGION
+F_SEARCH --> E_CITY
+F_PROFILE --> E_CITY
+
+' --- entities → shared ---
+E_CITY --> E_SIGHT
+E_REGION --> S_DOM
+
+note right of STORE
+  store = единственный
+  держатель состояния.
+  Виджеты/фичи получают его
+  через DI в init(store),
+  читают store.getState(),
+  подписываются store.subscribe()
+end note
+
+note bottom of S_STORE
+  store-mechanism — чистый createStore(),
+  не знает о домене.
+  app/store.js — экземпляр + persist.
+end note
+
+legend right
+  | Слой | Цвет | Может импортировать |
+  | app | <#FFF8E1> | всё ниже |
+  | widgets | <#EBF5FB> | features, entities, shared |
+  | features | <#FDEBD0> | entities, shared |
+  | entities | <#E8F8F5> | shared |
+  | shared | <#F4ECF7> | (только shared) |
+  ====
+  Импорты "вверх" или "боковые" между слайсами
+  одного слоя — ЗАПРЕЩЕНЫ. Это и убивает хаос монолита.
+endlegend
+
+@enduml

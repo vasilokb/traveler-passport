@@ -1,0 +1,80 @@
+@startuml 07-migration-map
+' ===========================================================================
+' КАК буду рефакторить — карта переноса функций из монолита в модули
+' Левая колонка: текущий app.js (группы функций)
+' Правая колонка: куда каждая группа переезжает
+' ===========================================================================
+
+skinparam ranksep 30
+skinparam nodesep 16
+skinparam rectangle {
+  BackgroundColor<<mono>>  #FDEDEC
+  BorderColor<<mono>>      #C0392B
+  BackgroundColor<<mod>>   #EBF5FB
+  BorderColor<<mod>>       #2980B9
+}
+skinparam ArrowColor #2C3E50
+title Как буду рефакторить: карта переноса функций\n(app.js 1982 строк → модули src/)
+
+rectangle "app.js — МОНОЛИТ\n(всё в одном файле, глобальный scope)" as MONO <<mono>> {
+  rectangle "1. Данные-справочники\nREGIONS, REGION_ICONS, CITIES,\nMAP, SIGHTS" as G_DATA <<mono>>
+  rectangle "2. Чистая гео-математика\nprojectToSVG, computeStarPoints,\ncreateStampSVG" as G_GEO <<mono>>
+  rectangle "3. Tier / sights\getCityTier, getSightsCount,\nhasChecklist, getCheckedCount,\ngetTierLabel, getTierEmoji" as G_TIER <<mono>>
+  rectangle "4. Утилиты\ngetCityById, getTodayLocal,\nnormalizeForSearch, escapeHtml,\nformatDateDisplay, getPluralSights" as G_UTIL <<mono>>
+  rectangle "5. Состояние\nstate, loadState, saveState,\nSTORAGE_KEY" as G_STATE <<mono>>
+  rectangle "6. Milestones\naddMilestone, removeMilestone,\nremoveAllMilestones" as G_MILE <<mono>>
+  rectangle "7. Карта (рендер+zoom)\ninitMapPoints, updateMapMarkers,\nupdateMapFilter, updateMapViewBox,\nzoomAtPoint, resetMapZoom,\nupdateMapLabels" as G_MAP <<mono>>
+  rectangle "8. Паспорт\nrenderPassport, buildSearchResults,\nbuildFilterAccordions, handlePassportClick" as G_PASS <<mono>>
+  rectangle "9. Профиль\nrenderProfile, generateChronicle,\nstartEditName..." as G_PROF <<mono>>
+  rectangle "10. Карточка города\nopenCityCard, renderCityCard,\nrenderChecklist, saveNote,\nrerenderCityCardPreservingScroll" as G_CARD <<mono>>
+  rectangle "11. Действия\ntogglePlanned, toggleSight,\npatchChecklistInPlace,\nconfirmVisit, removeVisit" as G_ACT <<mono>>
+  rectangle "12. Оверлеи/штамп\nrenderStampOverlay, goToCollection,\nshowShareText, showToast" as G_OVL <<mono>>
+  rectangle "13. Дата-пикер\nopenDatePicker, closeDatePicker" as G_DATE <<mono>>
+  rectangle "14. Онбординг\nshow/hide/continue/skip" as G_ONB <<mono>>
+  rectangle "15. Навигация/entry\nswitchTab, init(),\nDOMContentLoaded, SW-reg" as G_NAV <<mono>>
+}
+
+rectangle "ЦЕЛЕВЫЕ МОДУЛИ" as TGT {
+  rectangle "entities/region\n+ entities/city\n+ entities/sight\n+ shared/config/map-config" as T_DATA <<mod>>
+  rectangle "entities/region\n(createStampSVG)\nwidgets/map\n(projectToSVG,\ncomputeStarPoints)" as T_GEO <<mod>>
+  rectangle "entities/city\n(tier/sights)" as T_TIER <<mod>>
+  rectangle "shared/lib/format + dom\nentities/city (getCityById)" as T_UTIL <<mod>>
+  rectangle "app/store.js\n+ shared/lib/store-mechanism" as T_STATE <<mod>>
+  rectangle "features/stamps\n(milestones)" as T_MILE <<mod>>
+  rectangle "widgets/map" as T_MAP <<mod>>
+  rectangle "widgets/passport-list\n+ features/search" as T_PASS <<mod>>
+  rectangle "features/profile" as T_PROF <<mod>>
+  rectangle "widgets/city-card" as T_CARD <<mod>>
+  rectangle "features/{plan,checklist,visit}" as T_ACT <<mod>>
+  rectangle "features/stamps\n+ shared/lib/dom (toast)" as T_OVL <<mod>>
+  rectangle "features/visit" as T_DATE <<mod>>
+  rectangle "widgets/onboarding" as T_ONB <<mod>>
+  rectangle "app/main.js" as T_NAV <<mod>>
+}
+
+G_DATA --> T_DATA
+G_GEO --> T_GEO
+G_TIER --> T_TIER
+G_UTIL --> T_UTIL
+G_STATE --> T_STATE
+G_MILE --> T_MILE
+G_MAP --> T_MAP
+G_PASS --> T_PASS
+G_PROF --> T_PROF
+G_CARD --> T_CARD
+G_ACT --> T_ACT
+G_OVL --> T_OVL
+G_DATE --> T_DATE
+G_ONB --> T_ONB
+G_NAV --> T_NAV
+
+note bottom of MONO
+  <b>Порядок переноса (безопасный):</b>
+  Phase 1 — весь app.js → src/app/main.js как один модуль (поведение без изменений)
+  Phase 2 — вынести чистые: shared/lib + config + entities (группы 1,2,3,4,6)
+  Phase 3 — вынести app/store.js (группа 5): setState автосохраняет
+  Phase 4 — распил features + widgets (группы 7-14) + декомпозиция init() (группа 15)
+  Каждая фаза — рабочее приложение, поведение сохраняется.
+end note
+
+@enduml

@@ -1,0 +1,173 @@
+@startuml 06-target-module-tree
+' ===========================================================================
+' Как будет выглядеть приложение ПОСЛЕ рефакторинга — структура модулей
+' (физически: app.js разрезан на эти файлы; поведение не меняется)
+' ===========================================================================
+
+skinparam ranksep 38
+skinparam nodesep 20
+skinparam file {
+  BackgroundColor<<entry>>  #FFF8E1
+  BorderColor<<entry>>      #B8860B
+  BackgroundColor<<pure>>   #E8F8F5
+  BorderColor<<pure>>       #27AE60
+  BackgroundColor<<state>>  #FDEBD0
+  BorderColor<<state>>      #E67E22
+  BackgroundColor<<render>> #EBF5FB
+  BorderColor<<render>>     #2980B9
+  BackgroundColor<<data>>   #FDEDEC
+  BorderColor<<data>>       #C0392B
+}
+skinparam ArrowColor #7F8C8D
+title Как будет выглядеть приложение (target)\nструктура модулей после разборки монолита
+
+package "src/" as SRC {
+  package "app/" {
+    file "main.js" as M_MAIN <<entry>>
+    file "store.js" as M_STORE <<state>>
+  }
+
+  package "shared/" {
+    package "lib/" {
+      file "store-mechanism.js" as L_STORE <<pure>>
+      file "dom.js" as L_DOM <<pure>>
+      file "format.js" as L_FMT <<pure>>
+    }
+    package "config/" {
+      file "map-config.js" as C_MAP <<data>>
+    }
+  }
+
+  package "entities/" {
+    file "city/index.js" as E_CITY <<data>>
+    file "region/index.js" as E_REGION <<data>>
+    file "sight/index.js" as E_SIGHT <<data>>
+  }
+
+  package "features/" {
+    file "visit/index.js" as F_VISIT <<state>>
+    file "checklist/index.js" as F_CHECK <<state>>
+    file "plan/index.js" as F_PLAN <<state>>
+    file "stamps/index.js" as F_STAMP <<state>>
+    file "search/index.js" as F_SEARCH <<state>>
+    file "profile/index.js" as F_PROFILE <<state>>
+  }
+
+  package "widgets/" {
+    file "passport-list/index.js" as W_PASS <<render>>
+    file "map/index.js" as W_MAP <<render>>
+    file "city-card/index.js" as W_CARD <<render>>
+    file "onboarding/index.js" as W_ONB <<render>>
+  }
+}
+
+' заметки о содержимом
+note right of M_MAIN
+  <b>точка входа</b>
+  loadState → init всех features/widgets
+  → switchTab → регистрация SW
+  (бывший init() ~315 строк → ~30)
+end note
+
+note right of M_STORE
+  <b>состояние</b>
+  createStore() + loadState/saveState
+  + миграция + 4 инварианта v3
+  setState авосохраняет в localStorage
+end note
+
+note right of L_STORE
+  чистый механизм:
+  getState/setState/subscribe
+  (без знаний о домене)
+end note
+
+note right of L_DOM
+  escapeHtml, qs/qsa, showToast
+end note
+
+note right of L_FMT
+  getTodayLocal,
+  formatDateDisplay,
+  normalizeForSearch,
+  getPluralSights
+end note
+
+note right of E_CITY
+  CITIES (57),
+  getCityById,
+  getCityTier, getSightsCount,
+  hasChecklist, getCheckedCount
+end note
+
+note right of E_REGION
+  REGIONS, REGION_ICONS,
+  createStampSVG
+end note
+
+note right of E_SIGHT
+  SIGHTS (из data-sights.js
+  → ESM-экспорт)
+end note
+
+note right of F_VISIT
+  confirmVisit, removeVisit,
+  openDatePicker, closeDatePicker
+end note
+
+note right of F_CHECK
+  toggleSight,
+  patchChecklistInPlace
+end note
+
+note right of F_PLAN
+  togglePlanned
+end note
+
+note right of F_STAMP
+  renderStampOverlay, goToCollection,
+  addMilestone, removeMilestone...,
+  showShareText
+end note
+
+note right of F_PROFILE
+  renderProfile, generateChronicle,
+  startEditName, saveEditName...
+end note
+
+note right of W_PASS
+  renderPassport,
+  buildSearchResults,
+  buildFilterAccordions,
+  handlePassportClick
+end note
+
+note right of W_MAP
+  initMapPoints, updateMapMarkers,
+  updateMapFilter, zoom/pan/labels,
+  projectToSVG, computeStarPoints
+end note
+
+note right of W_CARD
+  openCityCard, renderCityCard,
+  renderChecklist, saveNote,
+  rerenderCityCardPreservingScroll
+end note
+
+note right of W_ONB
+  show/hide/continue/skip
+end note
+
+legend right
+  | Цвет | Тип |
+  |<#FFF8E1>| app (вход) |
+  |<#E8F8F5>| pure / shared lib |
+  |<#FDEBD0>| features (stateful) |
+  |<#EBF5FB>| widgets (render) |
+  |<#FDEDEC>| data / config |
+  ====
+  Правило импортов: строго вниз
+  app → widgets → features → entities → shared
+endlegend
+
+@enduml

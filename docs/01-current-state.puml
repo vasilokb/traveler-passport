@@ -1,0 +1,80 @@
+@startuml 01-current-state
+' ===========================================================================
+' ТЕКУЩЕЕ СОСТОЯНИЕ (слияние старых 01+02+03): монолит, deployment, проблемы
+' ===========================================================================
+
+skinparam ranksep 40
+skinparam nodesep 16
+skinparam component {
+  BackgroundColor #FDEDEC
+  BorderColor #C0392B
+}
+skinparam package {
+  BackgroundColor<<ctx>> #F8F9FA
+  BorderColor<<ctx>> #ABB2B9
+  BackgroundColor<<mono>> #FDEDEC
+  BorderColor<<mono>> #C0392B
+}
+skinparam ArrowColor #7F8C8D
+skinparam NoteBackgroundColor #FFF9C4
+
+title Сейчас: один монолит ~2000 строк без границ\n(всё в одном файле, всё глобально, зависимости во все стороны)
+
+' ---- Deployment context ----
+package "Браузер (PWA)" <<ctx>> {
+  package "**app.js**  (~2000 строк / 94 КБ)" <<mono>> {
+    component "Данные\nCITIES, REGIONS,\nSIGHTS, MAP\n(захардкожены)" as D_DATA
+    component "Состояние\nlet state (глобальное)\nsaveState вручную" as D_STATE
+    component "Валидация\nloadState\n(инварианты)" as D_VALID
+    component "Карта\nренер + pan/zoom/pinch\n+ подписи (~180 строк init)" as D_MAP
+    component "Рендер паспорта\n+ поиск + фильтры" as D_PASS
+    component "Карточка города\n+ чек-лист + дейтпикер" as D_CARD
+    component "Профиль\n+ ордена + хроника" as D_PROF
+    component "init() ~315 строк\nсплошные addEventListener" as D_INIT
+  }
+  component "style.css\n(~1400 строк)" as CSS
+  component "data-sights.js\n(глобальный объект SIGHTS)" as DSIGHTS
+  component "sw.js\n(cache-first)" as SW
+}
+
+database "localStorage\n(travelerPassport)" as LS
+
+' ---- tangled connections (хаос) ----
+D_DATA -[#BDC3C7,dashed]-> D_MAP
+D_DATA -[#BDC3C7,dashed]-> D_PASS
+D_DATA -[#BDC3C7,dashed]-> D_CARD
+D_STATE <-[#E74C3C]-> D_MAP : ручной\nре-рендер
+D_STATE <-[#E74C3C]-> D_PASS : ручной\nре-рендер
+D_STATE <-[#E74C3C]-> D_PROF : ручной\nре-рендер
+D_MAP --> D_CARD : открывает
+D_CARD --> D_MAP : обновляет
+D_CARD --> D_PROF : ре-рендер
+D_INIT --> D_MAP : pan/zoom\nсобытия
+D_INIT --> D_CARD : клики
+D_VALID --> D_STATE
+D_PASS --> D_CARD
+
+DSIGHTS -[hidden]right-> D_DATA
+CSS -[hidden]down-> D_INIT
+
+LS <-- D_STATE : saveState()\n(забыл = потеря)
+LS --> D_VALID : loadState()
+
+note bottom of D_INIT
+  <b>5 корневых проблем:</b>
+  1. Монолит: всё в одном файле, всё глобально
+  2. Глобальный state, прямой доступ отовсюду
+  3. saveState() вручную — забыл = потеря данных
+  4. Ручная синхронизация рендера — пропустил = рассинхрон
+  5. Нет границ: карта знает про чек-листы, карточка — про профиль
+end note
+
+legend right
+  <#FDEDEC> = монолит app.js (без границ)
+  <#E74C3C> = ручная синхронизация (хрупкое место)
+  ----
+  Нет бэкенда. Нет сборщика. Нет фреймворка.
+  Деплой — статические файлы в папку.
+endlegend
+
+@enduml

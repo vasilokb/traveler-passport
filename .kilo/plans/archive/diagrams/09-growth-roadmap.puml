@@ -1,0 +1,53 @@
+@startuml 09-growth-roadmap
+' ===========================================================================
+' Эволюция архитектуры во времени: монолит → 5 слоёв → ... → полный FSD
+' Триггеры новых слоёв = фичи продукта (paid, Заметки, Команды)
+' ===========================================================================
+
+left to right direction
+skinparam ranksep 26
+skinparam nodesep 14
+skinparam rectangle {
+  BackgroundColor<<mono>>   #FDEDEC
+  BorderColor<<mono>>       #C0392B
+  BackgroundColor<<subset>> #EBF5FB
+  BorderColor<<subset>>     #2980B9
+  BackgroundColor<<trigger>> #E8F8F5
+  BorderColor<<trigger>>     #27AE60
+  BackgroundColor<<full>>    #FFF8E1
+  BorderColor<<full>>        #B8860B
+}
+skinparam ArrowColor #2C3E50
+skinparam ArrowFontSize 11
+title Эволюция архитектуры: монолит → полный FSD\nновые слои появляются, когда их требуют конкретные фичи (✦)
+
+rectangle "**S0 · Сейчас**\n──────────\napp.js = МОНОЛИТ\n(один файл, ~2000 строк)\nfree · localStorage\nбез бэкенда · аноним" as S0 <<mono>>
+
+rectangle "**S1 · Разборка**\n──────────\napp\nwidgets\nfeatures\nentities\nshared    (5 слоёв)\nправило: импорт только вниз\nповедение без изменений" as S1 <<subset>>
+
+rectangle "**S2 · Платный контент**\n──────────\napp\nwidgets   +paywall, audio-bar, route-view\nfeatures  +entitlement, purchase, download,\n          audio-player, route-follow\nentities\nshared    +api/revenuecat, api/content\n──────────\nCapacitor + RevenueCat\nCloudflare Workers + R2 + KV\n(аноним)" as S2 <<subset>>
+
+rectangle "**S3 · Экран Заметок** ✦\n──────────\napp\n**pages**   ← НОВЫЙ СЛОЙ\nwidgets    +notes-list, note-editor\nfeatures   +notes\nentities   +note\nshared\n──────────\nэкранов 4+ → нужен слой pages" as S3 <<trigger>>
+
+rectangle "**S4 · Аккаунты**\n──────────\napp\npages\nwidgets    +auth UI\nfeatures   +auth, +sync\nentities   +user, account\nshared     +api/auth\n──────────\nлогин возвращается\nв обязательные\nCF → +БД/auth" as S4 <<subset>>
+
+rectangle "**S5 · Команды / совместные** ✦\n──────────\napp\n**processes** ← НОВЫЙ СЛОЙ = ПОЛНЫЙ FSD\npages\nwidgets    +team, route-collab\nfeatures   +collaboration, presence\nentities   +team, sharedRoute\nshared     +realtime sync (Yjs/Supabase)\n──────────\nrealtime-бэкенд" as S5 <<full>>
+
+S0 --> S1 : разрезать app.js\nна модули
+S1 --> S2 : + аудио/маршруты\n(paid)
+S2 --> S3 : Заметки отдельным\nэкраном → +pages ✦
+S3 --> S4 : фичи требуют\nидентификации
+S4 --> S5 : совместные маршруты\n→ +processes ✦
+
+legend bottom
+  |= Цвет |= Этап |
+  |<#FDEDEC>| Монолит (сейчас) |
+  |<#EBF5FB>| Подмножество FSD (5 слоёв) — растим платный контент |
+  |<#E8F8F5>| Триггер: добавлен слой **pages** (экран Заметок) |
+  |<#FFF8E1>| Триггер: добавлен слой **processes** = ПОЛНЫЙ FSD (Команды) |
+  ====
+  ✦ = момент, когда новый слой FSD становится оправданным реальной фичей.
+  Слои добавляются СВЕРХУ, нижние (entities/features/shared) не переписываются.
+endlegend
+
+@enduml
