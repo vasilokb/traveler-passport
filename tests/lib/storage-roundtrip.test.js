@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadState, saveState, getDefaultState, STORAGE_KEY } from '../src/lib/storage.js';
+import { loadState, saveState, getDefaultState, STORAGE_KEY } from '@lib/storage.js';
 
 function savedFields(s) {
   return {
@@ -87,7 +87,3 @@ describe('saveState — ошибка квоты', () => {
     expect(res.error).toBeDefined();
   });
 });
-
-// Примечание: обёртка showToast в main.js при !ok покрывается ручным smoke-чеклистом #12
-// (импорт main.js в unit-тестах нежелателен — он регистрирует DOMContentLoaded-слушатель
-// и обращается к DOM). Ядро saveStatePure здесь проверено; обёртка — тривиальные 2 строки.

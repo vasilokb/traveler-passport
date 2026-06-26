@@ -1,6 +1,6 @@
-import { getCityTier } from './tier.js';
-import { getCityById, CITIES } from '../cities.js';
-import { SIGHTS } from '../data-sights.js';
+// TODO(phase-c): переезд в src/app/store.js + createStore из @shared/lib/store-mechanism
+import { getCityTier, getCityById, CITIES } from '@entities/city/index.js';
+import { SIGHTS } from '@entities/sight/index.js';
 
 export const STORAGE_KEY = "travelerPassport";
 

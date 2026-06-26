@@ -1,4 +1,3 @@
-// TODO(phase-b): переезд в src/entities/sight/; сменить импорт на @entities/sight
 export const SIGHTS = {
   "minsk": [
     { "id": "s0", "name": "Троицкое предместье" },

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { CITIES } from '../src/cities.js';
-import { SIGHTS } from '../src/data-sights.js';
-import { loadState, STORAGE_KEY } from '../src/lib/storage.js';
+import { CITIES } from '@entities/city/index.js';
+import { SIGHTS } from '@entities/sight/index.js';
+import { loadState, STORAGE_KEY } from '@lib/storage.js';
 
-// Реальные данные из модулей Phase A (не выдуманные cityId) — гарантирует,
+// Реальные данные из модулей Phase A/B (не выдуманные cityId) — гарантирует,
 // что валидация getCityById/CITIES/SIGHTS внутри loadState не отбросит фикстуры.
 const checklistCity = CITIES.find(c => SIGHTS[c.id]);           // 'minsk', 4 достопримечательности
 const allSights = SIGHTS[checklistCity.id].map(s => s.id);       // ['s0','s1','s2','s3']
@@ -61,7 +61,6 @@ describe('v3-инварианты через loadState', () => {
   it('все 4 инварианта вместе на одном state', () => {
     const s = loadFrom({
       currentTab: 'passport', travelerName: 'T', onboardingComplete: true,
-      // minsk — gold (все 4 отметки), brest — silver (1 из 3), grodno — не посещён
       visitedCities: {
         [checklistCity.id]: { date: '2025-01-01' },
         [secondSightsCity]: { date: '2025-02-01' },

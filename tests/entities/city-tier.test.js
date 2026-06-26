@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   getCityTier, getSightsCount, hasChecklist, getCheckedCount, getTierLabel, getTierEmoji,
-} from '../src/lib/tier.js';
-import { SIGHTS } from '../src/data-sights.js';
+} from '@entities/city/index.js';
+import { SIGHTS } from '@entities/sight/index.js';
 
 const CHECKLIST_CITY = 'minsk';  // 4 sights in SIGHTS
 const PLAIN_CITY = 'slutsk';    // нет чек-листа (не в SIGHTS)

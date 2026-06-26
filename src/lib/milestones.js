@@ -1,4 +1,5 @@
-import { getTodayLocal } from './dates.js';
+// TODO(phase-d1): переезд в features/checklist/milestones.js
+import { getTodayLocal } from '@shared/lib/format.js';
 
 export function addMilestone(state, cityId, tier) {
   if (tier !== "silver" && tier !== "gold") return;

@@ -1,13 +1,13 @@
-import { getCityById } from '../cities.js';
+// TODO(phase-d2): переезд в widgets/profile/chronicle.js
+import { getCityById } from '@entities/city/index.js';
 
-export function formatDateDisplay(dateStr) {
-  var parts = dateStr.split("-");
-  return parts[2] + "." + parts[1] + "." + parts[0];
-}
+// formatDateDisplay НЕ определяется/реэкспортируется здесь — единственный источник
+// @shared/lib/format.js (см. §2.6). generateChronicle НЕ вызывает formatDateDisplay:
+// даты передаются сырыми (visit.date, m.date), форматирование применяется в рендере.
 
 // Отклонение от табличной сигнатуры плана §3.2 (`(state, CITIES)`):
 // имя города разрешается через импортированный getCityById (граф импортов §3.2.1:
-// chronicle.js → ../cities.js), чтобы сохранить оригинальный алгоритм 1:1
+// chronicle.js → @entities/city), чтобы сохранить оригинальный алгоритм 1:1
 // (app.js вызывает getCityById(cityId), а не обращается к CITIES напрямую).
 export function generateChronicle(state) {
   var entries = [];

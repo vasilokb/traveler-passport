@@ -1,15 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { generateChronicle, formatDateDisplay } from '../src/lib/chronicle.js';
+import { generateChronicle } from '@lib/chronicle.js';
 
 function st(over) {
   return Object.assign({ visitedCities: {}, milestones: [] }, over);
 }
-
-describe('formatDateDisplay', () => {
-  it('YYYY-MM-DD → DD.MM.YYYY', () => {
-    expect(formatDateDisplay('2025-04-12')).toBe('12.04.2025');
-  });
-});
 
 describe('generateChronicle', () => {
   it('пустое состояние → []', () => {

@@ -10,6 +10,7 @@ export default defineConfig({
       '@features': path.resolve(process.cwd(), 'src/features'),
       '@entities': path.resolve(process.cwd(), 'src/entities'),
       '@shared': path.resolve(process.cwd(), 'src/shared'),
+      '@lib': path.resolve(process.cwd(), 'src/lib'),
     },
   },
   build: {

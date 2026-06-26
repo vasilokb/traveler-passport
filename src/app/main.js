@@ -1,11 +1,31 @@
-import { SIGHTS } from '../data-sights.js';
-import { CITIES, getCityById, REGIONS, REGION_ICONS, MAP, createStampSVG, projectToSVG, computeStarPoints } from '../cities.js';
-import { getTodayLocal } from '../lib/dates.js';
-import { escapeHtml } from '../lib/dom.js';
-import { getCityTier as getCityTierPure, getSightsCount as getSightsCountPure, hasChecklist as hasChecklistPure, getCheckedCount as getCheckedCountPure, getTierLabel, getTierEmoji } from '../lib/tier.js';
-import { generateChronicle as generateChroniclePure, formatDateDisplay } from '../lib/chronicle.js';
-import { addMilestone as addMilestonePure, removeMilestone as removeMilestonePure, removeAllMilestones as removeAllMilestonesPure } from '../lib/milestones.js';
-import { loadState as loadStatePure, saveState as saveStatePure, STORAGE_KEY } from '../lib/storage.js';
+import { SIGHTS } from '@entities/sight/index.js';
+import {
+  CITIES,
+  getCityById,
+  getCityTier as getCityTierPure,
+  getSightsCount as getSightsCountPure,
+  hasChecklist as hasChecklistPure,
+  getCheckedCount as getCheckedCountPure,
+  getTierLabel,
+  getTierEmoji,
+} from '@entities/city/index.js';
+import {
+  REGIONS,
+  REGION_ICONS,
+  createStampSVG,
+  computeStarPoints,
+} from '@entities/region/index.js';
+import { MAP, projectToSVG } from '@shared/config/map-config.js';
+import {
+  formatDateDisplay,
+  getTodayLocal,
+  normalizeForSearch,
+  getPluralSights,
+} from '@shared/lib/format.js';
+import { escapeHtml, showToast } from '@shared/lib/dom.js';
+import { generateChronicle as generateChroniclePure } from '@lib/chronicle.js';
+import { addMilestone as addMilestonePure, removeMilestone as removeMilestonePure, removeAllMilestones as removeAllMilestonesPure } from '@lib/milestones.js';
+import { loadState as loadStatePure, saveState as saveStatePure, STORAGE_KEY } from '@lib/storage.js';
 
 function getCityTier(cityId) { return getCityTierPure(cityId, state, SIGHTS); }
 function getSightsCount(cityId) { return getSightsCountPure(cityId, SIGHTS); }
@@ -442,18 +462,6 @@ function showShareText(cityName) {
   }
 }
 
-function showToast(message) {
-  var toast = document.getElementById("toast");
-  if (!toast) return;
-  toast.textContent = message;
-  toast.style.display = "block";
-  toast.classList.add("visible");
-  setTimeout(function () {
-    toast.style.display = "none";
-    toast.classList.remove("visible");
-  }, 2000);
-}
-
 
 
 let state = {
@@ -525,15 +533,6 @@ function switchTab(tabId) {
 }
 
 
-function normalizeForSearch(str) {
-  return str
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/і/g, "и")
-    .replace(/ў/g, "в")
-    .replace(/[-\s]/g, "")
-    .trim();
-}
 
 var currentPassportMode = "filter";
 
@@ -1371,14 +1370,6 @@ function renderChecklist(cityId, hasSights, isVisited, tier, regionColor, svgChe
   return html;
 }
 
-function getPluralSights(n) {
-  var mod10 = n % 10;
-  var mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "достопримечательность";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "достопримечательности";
-  return "достопримечательностей";
-}
-
 function openDatePicker(cityId) {
   var city = CITIES.find(function (c) { return c.id === cityId; });
   if (!city) return;
@@ -1791,5 +1782,10 @@ function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+// TODO(phase-d2): убрать экспорты — временно для Phase B XSS-тестов (tests/security/xss.test.js).
+// После распила widgets/ эти функции переедут в modules и будут экспортироваться штатно.
+export { renderProfile, renderCityCard, buildSearchResults };
+export function __setTestState(s) { state = s; }
 
 
