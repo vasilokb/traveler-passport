@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadState, saveState, getDefaultState, STORAGE_KEY } from '@lib/storage.js';
+import { loadState, getDefaultState, store, STORAGE_KEY } from '@app/store.js';
 
 function savedFields(s) {
   return {
@@ -27,22 +27,23 @@ describe('getDefaultState', () => {
   });
 });
 
-describe('saveState/loadState round-trip', () => {
-  it('save → load сохраняет 8 полей (инвариант-стабильное состояние)', () => {
-    const state = {
-      currentTab: 'passport',
+describe('store.setState → loadState round-trip (persist)', () => {
+  it('setState.persist → load сохраняет 8 полей', () => {
+    // Сброс store к дефолту (beforeEach уже очистил localStorage + store)
+    store.setState({
       travelerName: 'Тестер',
-      onboardingComplete: true,
       visitedCities: { minsk: { date: '2025-01-15' } }, // bronze (без отметок)
-      plannedCities: {},
       cityNotes: { minsk: 'заметка' },
-      checkedSights: {},
-      milestones: [],
-    };
-    const res = saveState(state, localStorage);
-    expect(res).toEqual({ ok: true });
+    });
+    // persist-адаптер store уже записал отфильтрованный дамп в localStorage
     const loaded = loadState({ storage: localStorage });
-    expect(savedFields(loaded)).toEqual(savedFields(state));
+    expect(savedFields(loaded)).toEqual(savedFields({
+      ...getDefaultState(),
+      travelerName: 'Тестер',
+      visitedCities: { minsk: { date: '2025-01-15' } },
+      cityNotes: { minsk: 'заметка' },
+      milestones: [],
+    }));
   });
 });
 
@@ -72,18 +73,5 @@ describe('loadState — крайние случаи', () => {
     expect(s.travelerName).toBe('Белорусский путешественник');
     expect(s.visitedCities).toEqual({});
     expect(s.milestones).toEqual([]);
-  });
-});
-
-describe('saveState — ошибка квоты', () => {
-  it('возвращает { ok: false, error } когда setItem бросает QuotaExceededError', () => {
-    const storage = {
-      getItem: () => null,
-      setItem: () => { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; },
-      removeItem: () => {},
-    };
-    const res = saveState(getDefaultState(), storage);
-    expect(res.ok).toBe(false);
-    expect(res.error).toBeDefined();
   });
 });

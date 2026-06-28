@@ -1,24 +1,30 @@
-// TODO(phase-c): начальная загрузка из persist (JSON.parse) обходит validate. Для домена это
-// неприемлемо — loadState Phase A делает полную валидацию (cityId, даты, дедуп, 4 инварианта).
-// Phase C либо (а) валидирует состояние вручную ПОСЛЕ createStore (тогда persist-загрузку createStore
-// отключить/игнорировать), либо (б) дорабатывает createStore: validate(next, initialState) при загрузке.
-// ⚠️ ВАЖНО для Phase C: `persist` НЕ равно `localStorage`.
-// persist — это wrapper-объект с ПЯМЯ строковым полем `key` + методами getItem/setItem:
-//   { getItem: k => localStorage.getItem(k),
-//     setItem: (k, v) => localStorage.setItem(k, v),
-//     key: 'travelerPassport' }
-// Передать `localStorage` напрямую — нельзя: у него есть метод key(n), который затенит
-// строковое поле key (persist.key станет функцией).
 export function createStore(opts) {
   var initialState = opts.initialState;
   var validate = opts.validate;
   var persist = opts.persist;
   var onError = opts.onError;
+  var initialStateLoader = opts.initialStateLoader;
 
   var state = initialState;
   var subscribers = new Set();
 
-  if (persist && persist.key) {
+  // persistFields (опционально): множество полей, которые персистятся. Если задано,
+  // persist-запись пропускается для object-patch'ей, затрагивающих только эфемерные
+  // (не-персистируемые) поля — они не пишутся в storage в любом случае.
+  // Для function-updater'ов запись выполняется всегда (консервативно).
+  var persistFieldsLookup = null;
+  if (Array.isArray(opts.persistFields)) {
+    persistFieldsLookup = Object.create(null);
+    for (var i = 0; i < opts.persistFields.length; i++) {
+      persistFieldsLookup[opts.persistFields[i]] = true;
+    }
+  }
+
+  // loadFromPersist (default true): управляет авто-загрузкой сырого дампа из persist.
+  // app/store.js передаёт loadFromPersist: false, потому что сам валидирует состояние
+  // в loadState() и не хочет, чтобы createStore затирал его сырым невалидированным JSON.
+  var shouldLoadFromPersist = opts.loadFromPersist !== false;
+  if (shouldLoadFromPersist && persist && persist.key) {
     try {
       var raw = persist.getItem(persist.key);
       if (raw) state = JSON.parse(raw);
@@ -42,8 +48,17 @@ export function createStore(opts) {
     }
     state = validated;
     if (persist && persist.key) {
-      try { persist.setItem(persist.key, JSON.stringify(state)); }
-      catch (e) { if (onError) onError(e, 'persist', state); }
+      var shouldWrite = true;
+      if (persistFieldsLookup && typeof patch !== 'function') {
+        shouldWrite = false;
+        for (var k in patch) {
+          if (persistFieldsLookup[k]) { shouldWrite = true; break; }
+        }
+      }
+      if (shouldWrite) {
+        try { persist.setItem(persist.key, JSON.stringify(state)); }
+        catch (e) { if (onError) onError(e, 'persist', state); }
+      }
     }
     subscribers.forEach(function (fn) { fn(state); });
   }
@@ -53,5 +68,13 @@ export function createStore(opts) {
     return function () { subscribers.delete(fn); };
   }
 
-  return { getState: getState, setState: setState, subscribe: subscribe };
+  // Test-only API: сбрасывает in-memory state (через initialStateLoader, если задан —
+  // иначе к initialState) и очищает подписчиков. Маркер имени «_» — НЕ использовать в
+  // production-коде. Нужен, потому что store — синглтон, и без сброса тесты flaky.
+  function _resetForTest() {
+    state = initialStateLoader ? initialStateLoader() : initialState;
+    subscribers.clear();
+  }
+
+  return { getState: getState, setState: setState, subscribe: subscribe, _resetForTest: _resetForTest };
 }

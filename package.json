@@ -10,7 +10,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "lint:xss": "node tools/check-xss.mjs",
-    "lint:imports": "node tools/check-imports.mjs"
+    "lint:imports": "node tools/check-imports.mjs",
+    "lint:mutations": "node tools/check-mutations.mjs"
   },
   "dependencies": {
     "puppeteer-core": "^24.43.1"

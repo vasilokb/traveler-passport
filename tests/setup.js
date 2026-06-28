@@ -1,5 +1,9 @@
+import { _resetForTest } from '../src/app/store.js';
+
 beforeEach(() => {
   localStorage.clear();
+  // store — синглтон; без сброса in-memory state + subscribers тесты flaky.
+  _resetForTest();
 });
 
 // jsdom не реализует window.matchMedia. Некоторый код приложения (напр. привязка

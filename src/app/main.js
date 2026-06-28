@@ -18,28 +18,46 @@ import {
 import { MAP, projectToSVG } from '@shared/config/map-config.js';
 import {
   formatDateDisplay,
-  getTodayLocal,
-  normalizeForSearch,
   getPluralSights,
 } from '@shared/lib/format.js';
 import { escapeHtml, showToast } from '@shared/lib/dom.js';
 import { generateChronicle as generateChroniclePure } from '@lib/chronicle.js';
-import { addMilestone as addMilestonePure, removeMilestone as removeMilestonePure, removeAllMilestones as removeAllMilestonesPure } from '@lib/milestones.js';
-import { loadState as loadStatePure, saveState as saveStatePure, STORAGE_KEY } from '@lib/storage.js';
+import { initVisit } from '@features/visit/index.js';
+import { initChecklist } from '@features/checklist/index.js';
+import { initStamps } from '@features/stamps/index.js';
+import { initPlan } from '@features/plan/index.js';
+import { initSearch } from '@features/search/index.js';
+import { renderStampOverlay, closeStampOverlay } from '@features/stamps/overlay.js';
+import { renderDatePicker, closeDatePicker } from '@features/visit/date-picker.js';
+import { store, omitKey } from './store.js';
 
-function getCityTier(cityId) { return getCityTierPure(cityId, state, SIGHTS); }
+function getCityTier(cityId) { return getCityTierPure(cityId, store.getState(), SIGHTS); }
 function getSightsCount(cityId) { return getSightsCountPure(cityId, SIGHTS); }
 function hasChecklist(cityId) { return hasChecklistPure(cityId, SIGHTS); }
-function getCheckedCount(cityId) { return getCheckedCountPure(cityId, state); }
-function addMilestone(cityId, tier) { return addMilestonePure(state, cityId, tier); }
-function removeMilestone(cityId, tier) { return removeMilestonePure(state, cityId, tier); }
-function removeAllMilestones(cityId) { return removeAllMilestonesPure(state, cityId); }
-function generateChronicle() { return generateChroniclePure(state); }
-function saveState() {
-  var res = saveStatePure(state, localStorage);
-  if (!res.ok) {
-    showToast('Не удалось сохранить данные. Освободите место в браузере.');
-  }
+function getCheckedCount(cityId) { return getCheckedCountPure(cityId, store.getState()); }
+function generateChronicle() { return generateChroniclePure(store.getState()); }
+
+// Feature API (module-level): init() присваивает их; render-функции
+// (renderCityCard, renderPassport), вызываемые ПОСЛЕ init(), ссылаются на них.
+let visitApi, checklistApi, planApi, stampsApi, searchApi;
+
+// Мьютекс isProcessing централизован через обёртки withMux/withMuxSlow (§4.2):
+// features получают их через hooks и оборачивают свои public-методы.
+function withMux(fn) {
+  return function (...args) {
+    if (isProcessing) return;
+    isProcessing = true;
+    try { return fn.apply(this, args); }
+    finally { setTimeout(function () { isProcessing = false; }, 400); }
+  };
+}
+function withMuxSlow(fn) {
+  return function (...args) {
+    if (isProcessing) return;
+    isProcessing = true;
+    try { return fn.apply(this, args); }
+    finally { setTimeout(function () { isProcessing = false; }, 560); }
+  };
 }
 
 
@@ -152,6 +170,7 @@ function initMapPoints() {
 function updateMapMarkers() {
   var pointsLayer = document.getElementById("map-points-layer");
   if (!pointsLayer) return;
+  var state = store.getState();
   var points = pointsLayer.querySelectorAll(".map-point");
 
   points.forEach(function (point) {
@@ -226,6 +245,7 @@ function updateMapMarkers() {
 function updateMapFilter() {
   var pointsLayer = document.getElementById("map-points-layer");
   if (!pointsLayer) return;
+  var state = store.getState();
   var points = pointsLayer.querySelectorAll(".map-point");
   var filter = state.mapFilter || "all";
   var visibleCount = 0;
@@ -304,6 +324,7 @@ function resetMapZoom() {
 function updateMapLabels() {
   var svg = document.getElementById("belarus-map");
   if (!svg) return;
+  var state = store.getState();
 
   var labels = svg.querySelectorAll(".map-label");
   if (labels.length === 0) return;
@@ -368,115 +389,10 @@ function updateMapLabels() {
   });
 }
 
-function renderStampOverlay(cityId) {
-  var city = CITIES.find(function (c) {
-    return c.id === cityId;
-  });
-  if (!city) return;
-
-  var region = REGIONS.find(function (r) {
-    return r.id === city.region;
-  });
-  var regionColor = region ? region.color : "#ccc";
-
-  var html = "";
-  html += '<div class="stamp-card">';
-  html +=
-    '  <div class="stamp-card-icon" style="color:' +
-    regionColor +
-    '">' +
-    createStampSVG(city.region, getCityTier(cityId)) +
-    "</div>";
-  html +=
-    '  <div class="stamp-card-city">' + escapeHtml(city.name) + "</div>";
-  html += '  <div class="stamp-card-actions">';
-  html +=
-    '    <button class="stamp-card-btn stamp-card-btn-share" id="stamp-share-btn">Поделиться</button>';
-  html +=
-    '    <button class="stamp-card-btn stamp-card-btn-collection" id="stamp-collection-btn">В коллекцию</button>';
-  html += "  </div>";
-  html += "</div>";
-
-  document.getElementById("stamp-overlay-content").innerHTML = html;
-
-  var shareBtn = document.getElementById("stamp-share-btn");
-  if (shareBtn) shareBtn.addEventListener("click", function () { showShareText(city.name); });
-
-  var collectionBtn = document.getElementById("stamp-collection-btn");
-  if (collectionBtn)
-    collectionBtn.addEventListener("click", function () { goToCollection(cityId); });
-}
-
-function closeStampOverlay() {
-  state.stampOverlayCityId = null;
-  document.getElementById("stamp-overlay").style.display = "none";
-}
-
-function goToCollection(cityId) {
-  closeStampOverlay();
-  closeCityCard();
-
-  state.currentTab = "passport";
-
-  var city = CITIES.find(function (c) {
-    return c.id === cityId;
-  });
-  var regionId = city ? city.region : null;
-
-  if (regionId && state.openedRegions.indexOf(regionId) === -1) {
-    state.openedRegions.push(regionId);
-  }
-
-  switchTab("passport");
-
-  if (regionId && cityId) {
-    setTimeout(function () {
-      var cell = document.querySelector(
-        '.stamp-cell[data-city-id="' + cityId + '"]'
-      );
-      if (cell) {
-        cell.scrollIntoView({ behavior: "smooth", block: "center" });
-        cell.classList.add("stamp-highlight");
-        setTimeout(function () {
-          cell.classList.remove("stamp-highlight");
-        }, 2000);
-      }
-    }, 300);
-  }
-}
-
-function showShareText(cityName) {
-  var text =
-    "Я посетил " +
-    cityName +
-    " и получил штамп в Паспорте путешественника по Беларуси! 🇧🇾";
-
-  if (navigator.share) {
-    navigator.share({ title: "Паспорт путешественника", text: text }).catch(
-      function () {}
-    );
-  } else if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(function () {
-      showToast("Текст скопирован");
-    }).catch(function () {});
-  }
-}
 
 
 
-let state = {
-  currentTab: "passport",
-  travelerName: "Белорусский путешественник",
-  onboardingComplete: false,
-  visitedCities: {},
-  plannedCities: {},
-  cityNotes: {},
-  checkedSights: {},
-  milestones: [],
-  openedRegions: [],
-  activeOverlayCityId: null,
-  stampOrigin: null,
-};
+
 
 
 
@@ -491,8 +407,8 @@ let state = {
 
 
 function switchTab(tabId) {
+  var state = store.getState();
   if (state.currentTab === "passport") {
-    state.passportSearchQuery = "";
     var searchInput = document.getElementById("passport-search");
     if (searchInput) searchInput.value = "";
     var allFilterBtns = document.querySelectorAll(".passport-filter-btn");
@@ -502,8 +418,15 @@ function switchTab(tabId) {
     });
   }
 
-  state.currentTab = tabId;
-  saveState();
+  store.setState(function (prev) {
+    var next = { ...prev, currentTab: tabId };
+    // СВЕРЕНО с app.js:865 — чистим searchQuery при уходе С passport
+    // (без проверки tabId !== "passport").
+    if (prev.currentTab === "passport") {
+      next.passportSearchQuery = "";
+    }
+    return next;
+  });
 
   document.querySelectorAll(".tab-content").forEach(function (el) {
     el.classList.remove("active");
@@ -539,6 +462,7 @@ var currentPassportMode = "filter";
 function renderPassport() {
   var container = document.getElementById("passport-list");
   if (!container) return;
+  var state = store.getState();
   var totalVisited = Object.keys(state.visitedCities).length;
 
   var countEl = document.getElementById("passport-count");
@@ -548,9 +472,9 @@ function renderPassport() {
 
   function buildHtml() {
     if (newMode === "search") {
-      return buildSearchResults();
+      return searchApi.getResultsHtml(store.getState());
     }
-    return buildFilterAccordions();
+    return searchApi.getAccordionsHtml(store.getState());
   }
 
   if (newMode !== currentPassportMode) {
@@ -563,150 +487,6 @@ function renderPassport() {
   } else {
     container.innerHTML = buildHtml();
   }
-}
-
-function buildSearchResults() {
-  var query = state.passportSearchQuery;
-  var normalizedQuery = normalizeForSearch(query);
-  var results = [];
-
-  CITIES.forEach(function (city) {
-    if (normalizeForSearch(city.name).includes(normalizedQuery)) {
-      results.push(city);
-    }
-  });
-
-  if (results.length === 0) {
-    return '<div class="passport-search-empty">Ничего не найдено</div>';
-  }
-
-  var html = '<div class="passport-search-results">';
-  results.forEach(function (city) {
-    var region = REGIONS.find(function (r) { return r.id === city.region; });
-    var regionColor = region ? region.color : "#ccc";
-    var isVisited = !!state.visitedCities[city.id];
-    var isPlanned = !!state.plannedCities[city.id];
-
-    var statusIcon = "";
-    if (isVisited) {
-      statusIcon = '<svg width="16" height="16" viewBox="0 0 20 20" fill="#27AE60"><path d="M7.629 14.566l-4.24-4.24 1.414-1.414 2.826 2.826 7.072-7.072 1.414 1.414z"/></svg>';
-    } else if (isPlanned) {
-      statusIcon = '<svg width="16" height="16" viewBox="0 0 20 20" fill="' + regionColor + '">' +
-        '<line x1="3" y1="2" x2="3" y2="16" stroke="' + regionColor + '" stroke-width="1.5"/>' +
-        '<rect x="3" y="2" width="10" height="7" fill="' + regionColor + '"/>' +
-        '</svg>';
-    }
-
-    html += '<div class="passport-search-result" data-city-id="' + city.id + '">';
-    html += '  <div class="passport-search-icon" style="color:' + regionColor + '">' + createStampSVG(city.region, getCityTier(city.id)) + '</div>';
-    html += '  <span class="passport-search-name">' + escapeHtml(city.name) + '</span>';
-    html += '  <span class="passport-search-status">' + statusIcon + '</span>';
-    html += '</div>';
-  });
-  html += '</div>';
-  return html;
-}
-
-function buildFilterAccordions() {
-  var filter = state.passportFilter || "all";
-  var html = "";
-  var anyRendered = false;
-
-  REGIONS.forEach(function (region) {
-    var citiesInRegion = CITIES.filter(function (c) { return c.region === region.id; });
-    var regionTotal = citiesInRegion.length;
-    var regionVisited = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; }).length;
-
-    var filtered;
-    if (filter === "visited") {
-      filtered = citiesInRegion.filter(function (c) { return state.visitedCities[c.id]; });
-    } else if (filter === "unvisited") {
-      filtered = citiesInRegion.filter(function (c) { return !state.visitedCities[c.id]; });
-    } else if (filter === "planned") {
-      filtered = citiesInRegion.filter(function (c) { return state.plannedCities[c.id]; });
-    } else {
-      filtered = citiesInRegion;
-    }
-
-    if (filtered.length === 0) return;
-    anyRendered = true;
-
-    var isOpen = state.openedRegions.indexOf(region.id) !== -1;
-    var isCapital = region.id === "minsk";
-
-    if (isCapital) {
-      var capCity = filtered[0];
-      var capTier = getCityTier(capCity.id);
-      var capVisited = !!state.visitedCities[capCity.id];
-
-      html += '<div class="accordion-item capital-block">';
-      html += '  <div class="accordion-header">';
-      html += '    <span class="accordion-color-dot" style="background:' + region.color + '"></span>';
-      html += '    <span class="accordion-region-name">' + escapeHtml(capCity.name) + ' <span class="capital-tag">столица</span></span>';
-      html += '  </div>';
-      html += '  <div class="stamps-grid">';
-      html += '    <div class="stamp-cell' + (capVisited ? ' visited' : '') + (capTier ? ' tier-' + capTier : '') + '" data-city-id="' + capCity.id + '">';
-      html += '      <div class="stamp-icon' + (capVisited ? ' visited' : '') + '" style="' + (capVisited ? '--region-color:' + region.color + ';color:' + region.color : '') + '">';
-      html += createStampSVG(region.id, capTier);
-      html += '      </div>';
-      html += '      <span class="stamp-name">' + escapeHtml(capCity.name) + '</span>';
-      html += '    </div>';
-      html += '  </div>';
-      html += '</div>';
-      return;
-    }
-
-    var isComplete = regionTotal > 0 && regionVisited === regionTotal;
-
-    var itemClass = "accordion-item";
-    if (isOpen) itemClass += " open";
-    html += '<div class="' + itemClass + '" data-region-id="' + region.id + '">';
-    html += '  <div class="accordion-header">';
-
-    html += '    <span class="accordion-color-dot" style="background:' + region.color + '"></span>';
-
-    html += '    <span class="accordion-region-name">' + region.name + '</span>';
-
-    if (isComplete) {
-      html += '    <span class="accordion-badge badge-gold">Пройден</span>';
-    }
-
-    html += '    <span class="accordion-count">' + regionVisited + ' из ' + regionTotal + '</span>';
-    html += '    <svg class="accordion-arrow" viewBox="0 0 20 20" fill="currentColor"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>';
-    html += '  </div>';
-    html += '  <div class="accordion-body">';
-    html += '    <div class="accordion-inner">';
-    html += '      <div class="stamps-grid">';
-
-    filtered.forEach(function (city) {
-      var isVisited = !!state.visitedCities[city.id];
-      var cityTier = getCityTier(city.id);
-      html += '<div class="stamp-cell' + (isVisited ? ' visited' : '') + (cityTier ? ' tier-' + cityTier : '') + '" data-city-id="' + city.id + '">';
-      html += '  <div class="stamp-icon' + (isVisited ? ' visited' : '') + '" style="' + (isVisited ? '--region-color:' + region.color + ';color:' + region.color : '') + '">';
-      html += createStampSVG(region.id, cityTier);
-      html += '  </div>';
-      html += '  <span class="stamp-name">' + escapeHtml(city.name) + '</span>';
-      html += '</div>';
-    });
-
-    html += '      </div>';
-    html += '    </div>';
-    html += '  </div>';
-    html += '</div>';
-  });
-
-  if (!anyRendered) {
-    var totalVisited = Object.keys(state.visitedCities).length;
-    if (filter === "planned") {
-      html = '<div class="passport-search-empty">Нет городов в планах. Откройте карточку города и нажмите «Хочу поехать»</div>';
-    } else if (filter === "visited") {
-      html = '<div class="passport-search-empty">Здесь появятся города, которые вы посетите</div>';
-    } else if (filter === "unvisited" && totalVisited === CITIES.length) {
-      html = '<div class="passport-search-empty">Ура! Вы прошли всю Беларусь!</div>';
-    }
-  }
-
-  return html;
 }
 
 function handlePassportClick(e) {
@@ -724,12 +504,15 @@ function handlePassportClick(e) {
     var regionId = item.dataset.regionId;
     if (!regionId) return;
 
-    var idx = state.openedRegions.indexOf(regionId);
-    if (idx !== -1) {
-      state.openedRegions.splice(idx, 1);
-    } else {
-      state.openedRegions.push(regionId);
-    }
+    var opened = store.getState().openedRegions;
+    var idx = opened.indexOf(regionId);
+    store.setState(function (prev) {
+      var pidx = prev.openedRegions.indexOf(regionId);
+      if (pidx !== -1) {
+        return { ...prev, openedRegions: prev.openedRegions.slice(0, pidx).concat(prev.openedRegions.slice(pidx + 1)) };
+      }
+      return { ...prev, openedRegions: prev.openedRegions.concat([regionId]) };
+    });
     item.classList.toggle("open");
     return;
   }
@@ -754,22 +537,25 @@ function hideOnboarding() {
 function handleOnboardingContinue() {
   var input = document.getElementById("onboarding-name-input");
   var name = input.value.trim();
-  state.travelerName = name || "Белорусский путешественник";
-  state.onboardingComplete = true;
-  saveState();
+  store.setState({
+    travelerName: name || "Белорусский путешественник",
+    onboardingComplete: true,
+  });
   hideOnboarding();
 }
 
 function handleOnboardingSkip() {
-  state.travelerName = "Белорусский путешественник";
-  state.onboardingComplete = true;
-  saveState();
+  store.setState({
+    travelerName: "Белорусский путешественник",
+    onboardingComplete: true,
+  });
   hideOnboarding();
 }
 
 
 
 function renderProfile() {
+  var state = store.getState();
   var container = document.getElementById("tab-profile");
   var visitedIds = Object.keys(state.visitedCities);
   var totalVisited = visitedIds.length;
@@ -905,7 +691,7 @@ function startEditName() {
   var editEl = document.getElementById("profile-name-edit");
   var input = document.getElementById("profile-name-input");
   if (!displayEl || !editEl || !input) return;
-  input.value = state.travelerName;
+  input.value = store.getState().travelerName;
   displayEl.style.display = "none";
   editEl.style.display = "flex";
   input.focus();
@@ -916,8 +702,7 @@ function saveEditName() {
   var input = document.getElementById("profile-name-input");
   if (!input) return;
   var name = input.value.trim();
-  state.travelerName = name || "Белорусский путешественник";
-  saveState();
+  store.setState({ travelerName: name || "Белорусский путешественник" });
   renderProfile();
 }
 
@@ -928,115 +713,6 @@ function cancelEditName() {
 let isProcessing = false;
 var noteDebounceTimer = null;
 
-function togglePlanned(cityId) {
-  if (isProcessing) return;
-  isProcessing = true;
-  try {
-    var isVisited = !!state.visitedCities[cityId];
-    var hasSights = hasChecklist(cityId);
-    var tier = getCityTier(cityId);
-    if (tier === "silver") {
-      return;
-    }
-    if (tier === "gold" || (isVisited && !hasSights)) {
-      if (state.plannedCities[cityId]) {
-        delete state.plannedCities[cityId];
-        saveState();
-        rerenderCityCardPreservingScroll(cityId);
-        if (mapPointsInitialized) {
-          updateMapMarkers();
-          updateMapFilter();
-        }
-      }
-      return;
-    }
-    if (state.plannedCities[cityId]) {
-      delete state.plannedCities[cityId];
-    } else {
-      state.plannedCities[cityId] = true;
-    }
-    saveState();
-    clearTimeout(noteDebounceTimer);
-    var noteEl = document.getElementById("city-card-note");
-    if (noteEl) saveNote(cityId, noteEl.value);
-    rerenderCityCardPreservingScroll(cityId);
-    if (mapPointsInitialized) {
-      updateMapMarkers();
-      updateMapFilter();
-    }
-  } finally {
-    setTimeout(function () { isProcessing = false; }, 400);
-  }
-}
-
-function toggleSight(cityId, sightId) {
-  if (isProcessing) return;
-  isProcessing = true;
-  try {
-    clearTimeout(noteDebounceTimer);
-    var noteTextarea = document.getElementById("city-card-note");
-    if (noteTextarea) saveNote(cityId, noteTextarea.value);
-
-    var oldTier = getCityTier(cityId);
-    var checked = state.checkedSights[cityId];
-    if (!checked) {
-      checked = [];
-      state.checkedSights[cityId] = checked;
-    }
-    var idx = checked.indexOf(sightId);
-    if (idx >= 0) {
-      checked.splice(idx, 1);
-    } else {
-      checked.push(sightId);
-    }
-    if (checked.length === 0) {
-      delete state.checkedSights[cityId];
-    }
-    var newTier = getCityTier(cityId);
-    if (newTier === "gold" && state.plannedCities[cityId]) {
-      delete state.plannedCities[cityId];
-    }
-    if (newTier === "silver") {
-      state.plannedCities[cityId] = true;
-    }
-    if (newTier === "gold") {
-      addMilestone(cityId, "silver");
-      addMilestone(cityId, "gold");
-    } else if (newTier === "silver") {
-      addMilestone(cityId, "silver");
-      if (oldTier === "gold") removeMilestone(cityId, "gold");
-    } else if (newTier === "bronze") {
-      removeMilestone(cityId, "silver");
-      removeMilestone(cityId, "gold");
-    }
-    saveState();
-
-    if (mapPointsInitialized) {
-      updateMapMarkers();
-      updateMapFilter();
-    }
-
-    if (oldTier === newTier) {
-      patchChecklistInPlace(cityId, sightId);
-    } else if (newTier === "gold") {
-      patchChecklistInPlace(cityId, sightId);
-      var collapseEl = document.querySelector(".city-card-checklist .checklist-items");
-      if (collapseEl) collapseEl.classList.add("checklist-collapsed");
-      var fadeEls = document.querySelectorAll(".city-card-checklist .checklist-header, .city-card-checklist .checklist-progress-track");
-      for (var fe = 0; fe < fadeEls.length; fe++) {
-        fadeEls[fe].style.opacity = "0";
-      }
-      setTimeout(function () {
-        rerenderCityCardPreservingScroll(cityId);
-      }, 460);
-    } else {
-      rerenderCityCardPreservingScroll(cityId);
-    }
-  } finally {
-    setTimeout(function () { isProcessing = false; }, 560);
-  }
-}
-
 function patchChecklistInPlace(cityId, sightId) {
   var city = getCityById(cityId);
   if (!city) return;
@@ -1046,6 +722,7 @@ function patchChecklistInPlace(cityId, sightId) {
   }
   var regionColor = region ? region.color : "#ccc";
 
+  var state = store.getState();
   var checked = state.checkedSights[cityId] || [];
   var checkedCount = checked.length;
   var totalCount = getSightsCount(cityId);
@@ -1103,12 +780,15 @@ function rerenderCityCardPreservingScroll(cityId) {
 
 function saveNote(cityId, text) {
   var trimmed = text.trim();
-  if (trimmed) {
-    state.cityNotes[cityId] = trimmed;
-  } else {
-    delete state.cityNotes[cityId];
-  }
-  saveState();
+  store.setState(function (prev) {
+    var next = { ...prev };
+    if (trimmed) {
+      next.cityNotes = { ...prev.cityNotes, [cityId]: trimmed };
+    } else {
+      next.cityNotes = omitKey(prev.cityNotes, cityId);
+    }
+    return next;
+  });
 }
 
 function openCityCard(cityId) {
@@ -1122,8 +802,9 @@ function openCityCard(cityId) {
     if (!city) return;
 
     var originMap = { passport: "passport", map: "map" };
-    state.stampOrigin = originMap[state.currentTab] || state.currentTab;
-    state.activeOverlayCityId = cityId;
+    var currentTab = store.getState().currentTab;
+    var origin = originMap[currentTab] || currentTab;
+    store.setState({ stampOrigin: origin, activeOverlayCityId: cityId });
 
     renderCityCard(cityId);
 
@@ -1136,19 +817,18 @@ function openCityCard(cityId) {
 
 function closeCityCard() {
   clearTimeout(noteDebounceTimer);
-  var cityId = state.activeOverlayCityId;
+  var cityId = store.getState().activeOverlayCityId;
   if (cityId) {
     var textarea = document.getElementById("city-card-note");
     if (textarea) saveNote(cityId, textarea.value);
   }
 
-  state.activeOverlayCityId = null;
-  state.stampOrigin = null;
+  store.setState({ activeOverlayCityId: null, stampOrigin: null });
 
   document.getElementById("city-card-overlay").style.display = "none";
   document.getElementById("tab-bar").classList.remove("tab-bar-blocked");
 
-  if (state.currentTab === "passport") {
+  if (store.getState().currentTab === "passport") {
     renderPassport();
   }
 }
@@ -1156,6 +836,8 @@ function closeCityCard() {
 function renderCityCard(cityId) {
   var city = getCityById(cityId);
   if (!city) return;
+
+  var state = store.getState();
 
   var region = null;
   for (var ri = 0; ri < REGIONS.length; ri++) {
@@ -1250,15 +932,15 @@ function renderCityCard(cityId) {
 
   if (isVisited) {
     var removeBtn = document.getElementById("city-card-remove-btn");
-    if (removeBtn) removeBtn.addEventListener("click", function () { removeVisit(cityId); });
+    if (removeBtn) removeBtn.addEventListener("click", function () { visitApi.removeVisit(cityId); });
   } else {
     var visitBtn = document.getElementById("city-card-visit-btn");
-    if (visitBtn) visitBtn.addEventListener("click", function () { openDatePicker(cityId); });
+    if (visitBtn) visitBtn.addEventListener("click", function () { renderDatePicker(cityId, visitApi.confirmVisit); });
   }
 
   // Кнопка вишлиста / «Доисследовать» (общая для обоих случаев)
   var exploreBtn = document.getElementById("city-card-explore-btn");
-  if (exploreBtn) exploreBtn.addEventListener("click", function () { togglePlanned(cityId); });
+  if (exploreBtn) exploreBtn.addEventListener("click", function () { planApi.togglePlanned(cityId); });
 
   // Чек-лист: интерактивные пункты (IIFE для изоляции в ES5)
   if (hasSights && isVisited) {
@@ -1266,7 +948,7 @@ function renderCityCard(cityId) {
     for (var ev_si = 0; ev_si < items.length; ev_si++) {
       (function (item) {
         item.addEventListener("click", function () {
-          toggleSight(cityId, item.getAttribute("data-sight-id"));
+          checklistApi.toggleSight(cityId, item.getAttribute("data-sight-id"));
         });
       })(items[ev_si]);
     }
@@ -1317,6 +999,7 @@ function renderChecklist(cityId, hasSights, isVisited, tier, regionColor, svgChe
   }
 
   var sights = SIGHTS[cityId];
+  var state = store.getState();
   var checked = state.checkedSights[cityId] || [];
   var checkedCount = checked.length;
   var totalCount = sights.length;
@@ -1370,90 +1053,7 @@ function renderChecklist(cityId, hasSights, isVisited, tier, regionColor, svgChe
   return html;
 }
 
-function openDatePicker(cityId) {
-  var city = CITIES.find(function (c) { return c.id === cityId; });
-  if (!city) return;
-
-  var today = new Date().toLocaleDateString("sv-SE");
-
-  var html = "";
-  html += '<div class="date-picker-card">';
-  html += '  <p class="date-picker-title">Когда вы посетили ' + escapeHtml(city.name) + '?</p>';
-  html += '  <input type="date" class="date-picker-input" id="date-picker-input" max="' + today + '" value="' + today + '">';
-  html += '  <div class="date-picker-actions">';
-  html += '    <button class="date-picker-cancel" id="date-picker-cancel-btn">Отмена</button>';
-  html += '    <button class="date-picker-confirm" id="date-picker-confirm-btn">Подтвердить</button>';
-  html += '  </div>';
-  html += '</div>';
-
-  document.getElementById("date-picker-content").innerHTML = html;
-  document.getElementById("date-picker-modal").style.display = "flex";
-
-  document.getElementById("date-picker-cancel-btn").addEventListener("click", closeDatePicker);
-  document.getElementById("date-picker-confirm-btn").addEventListener("click", function () {
-    var input = document.getElementById("date-picker-input");
-    var selectedDate = input.value;
-    if (!selectedDate) return;
-    confirmVisit(cityId, selectedDate);
-  });
-}
-
-function closeDatePicker() {
-  document.getElementById("date-picker-modal").style.display = "none";
-}
-
-function confirmVisit(cityId, date) {
-  if (isProcessing) return;
-  isProcessing = true;
-  try {
-    clearTimeout(noteDebounceTimer);
-    var textarea = document.getElementById("city-card-note");
-    if (textarea) saveNote(cityId, textarea.value);
-
-    delete state.plannedCities[cityId];
-
-    state.visitedCities[cityId] = { date: date };
-    if (getCityTier(cityId) === "silver") {
-      state.plannedCities[cityId] = true;
-    }
-    saveState();
-    closeDatePicker();
-    rerenderCityCardPreservingScroll(cityId);
-    if (mapPointsInitialized) {
-      updateMapMarkers();
-      updateMapFilter();
-    }
-  } finally {
-    setTimeout(function () { isProcessing = false; }, 400);
-  }
-}
-
-function removeVisit(cityId) {
-  if (isProcessing) return;
-  isProcessing = true;
-  try {
-    delete state.visitedCities[cityId];
-    delete state.checkedSights[cityId];
-    removeAllMilestones(cityId);
-    delete state.plannedCities[cityId];
-    saveState();
-    closeCityCard();
-
-    if (state.currentTab === "profile") {
-      renderProfile();
-    }
-    if (mapPointsInitialized) {
-      updateMapMarkers();
-      updateMapFilter();
-    }
-  } finally {
-    setTimeout(function () { isProcessing = false; }, 400);
-  }
-}
-
 function init() {
-  state = loadStatePure({ storage: localStorage });
-
   var tabBar = document.getElementById("tab-bar");
   tabBar.addEventListener("click", function (e) {
     var btn = e.target.closest(".tab-btn");
@@ -1470,9 +1070,10 @@ function init() {
       var btn = e.target.closest(".passport-filter-btn");
       if (!btn) return;
       if (btn.classList.contains("disabled")) return;
-      state.passportFilter = btn.dataset.filter;
+      var filter = btn.dataset.filter;
+      store.setState({ passportFilter: filter });
       document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
-        b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+        b.classList.toggle("active", b.dataset.filter === filter);
       });
       renderPassport();
     });
@@ -1485,19 +1086,19 @@ function init() {
       var value = passportSearchInput.value;
       if (value === "") {
         clearTimeout(searchDebounceTimer);
-        state.passportSearchQuery = "";
+        store.setState({ passportSearchQuery: "" });
         renderPassport();
         document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
           b.classList.remove("disabled");
-          b.classList.toggle("active", b.dataset.filter === state.passportFilter);
+          b.classList.toggle("active", b.dataset.filter === store.getState().passportFilter);
         });
         return;
       }
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = setTimeout(function () {
-        state.passportSearchQuery = value.trim();
+        store.setState({ passportSearchQuery: value.trim() });
         renderPassport();
-        if (state.passportSearchQuery !== "") {
+        if (store.getState().passportSearchQuery !== "") {
           document.querySelectorAll(".passport-filter-btn").forEach(function (b) {
             b.classList.remove("active");
             b.classList.add("disabled");
@@ -1522,7 +1123,7 @@ function init() {
       if (!point) return;
       var cityId = point.dataset.cityId;
       if (!cityId) return;
-      state.stampOrigin = "map";
+      store.setState({ stampOrigin: "map" });
       openCityCard(cityId);
     });
   }
@@ -1532,9 +1133,10 @@ function init() {
     mapControls.addEventListener("click", function (e) {
       var btn = e.target.closest(".map-filter-btn");
       if (!btn) return;
-      state.mapFilter = btn.dataset.mapFilter;
+      var mapFilter = btn.dataset.mapFilter;
+      store.setState({ mapFilter: mapFilter });
       document.querySelectorAll(".map-filter-btn").forEach(function (b) {
-        b.classList.toggle("active", b.dataset.mapFilter === state.mapFilter);
+        b.classList.toggle("active", b.dataset.mapFilter === mapFilter);
       });
       updateMapFilter();
     });
@@ -1715,7 +1317,7 @@ function init() {
   if (stampOverlay) {
     stampOverlay.addEventListener("click", function (e) {
       if (e.target !== e.currentTarget) return;
-      var origin = state.stampOrigin;
+      var origin = store.getState().stampOrigin;
       closeStampOverlay();
       closeCityCard();
       if (origin) {
@@ -1746,25 +1348,80 @@ function init() {
   });
 
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden && state.activeOverlayCityId) {
+    var activeOverlayCityId = store.getState().activeOverlayCityId;
+    if (document.hidden && activeOverlayCityId) {
       clearTimeout(noteDebounceTimer);
       var textarea = document.getElementById("city-card-note");
-      if (textarea) saveNote(state.activeOverlayCityId, textarea.value);
+      if (textarea) saveNote(activeOverlayCityId, textarea.value);
     }
   });
 
   window.addEventListener("pagehide", function () {
-    if (state.activeOverlayCityId) {
+    var activeOverlayCityId = store.getState().activeOverlayCityId;
+    if (activeOverlayCityId) {
       var textarea = document.getElementById("city-card-note");
-      if (textarea) saveNote(state.activeOverlayCityId, textarea.value);
+      if (textarea) saveNote(activeOverlayCityId, textarea.value);
     }
   });
 
-  if (!state.onboardingComplete) {
+  if (!store.getState().onboardingComplete) {
     showOnboarding();
   }
 
-  switchTab(state.currentTab);
+  // === Инициализация features (§5.4) ===
+  // API объявлены на module-уровне (let ...), т.к. нужны render-функциям
+  // (renderCityCard/renderPassport), вызываемым ПОСЛЕ init().
+  function updateMap() {
+    if (mapPointsInitialized) {
+      updateMapMarkers();
+      updateMapFilter();
+    }
+  }
+  function saveNoteNow(cityId) {
+    var noteEl = document.getElementById("city-card-note");
+    if (noteEl) saveNote(cityId, noteEl.value);
+  }
+
+  visitApi = initVisit(store, {
+    rerenderCityCard: rerenderCityCardPreservingScroll,
+    updateMap: updateMap,
+    renderProfile: renderProfile,
+    closeCityCard: closeCityCard,
+    saveNoteNow: saveNoteNow,
+    // ⚠️ renderStampOverlay требует callbacks onShare/onCollection (§2.1).
+    // stampsApi — module-level, инициализируется ниже; closure гарантирует
+    // доступность stampsApi к моменту вызова hook'а (после init()).
+    showStampOverlay: function (cityId) {
+      renderStampOverlay(cityId, stampsApi.showShareText, stampsApi.goToCollection);
+    },
+    withMux: withMux,
+    withMuxSlow: withMuxSlow,
+  });
+
+  checklistApi = initChecklist(store, {
+    rerenderCityCard: rerenderCityCardPreservingScroll,
+    patchChecklist: patchChecklistInPlace,
+    updateMap: updateMap,
+    saveNoteNow: saveNoteNow,
+    withMux: withMux,
+    withMuxSlow: withMuxSlow,
+  });
+
+  planApi = initPlan(store, {
+    rerenderCityCard: rerenderCityCardPreservingScroll,
+    updateMap: updateMap,
+    saveNoteNow: saveNoteNow,
+    withMux: withMux,
+  });
+
+  stampsApi = initStamps(store, {
+    switchTab: switchTab,
+    closeCityCard: closeCityCard,
+  });
+
+  searchApi = initSearch(store, {});
+
+  switchTab(store.getState().currentTab);
 
   // Register SW only in production: in dev Vite serves transformed modules + HMR
   // client, and caching them breaks hot reload. SW update toast also gated to PROD.
@@ -1785,7 +1442,12 @@ document.addEventListener("DOMContentLoaded", init);
 
 // TODO(phase-d2): убрать экспорты — временно для Phase B XSS-тестов (tests/security/xss.test.js).
 // После распила widgets/ эти функции переедут в modules и будут экспортироваться штатно.
-export { renderProfile, renderCityCard, buildSearchResults };
-export function __setTestState(s) { state = s; }
+// NOTE(phase-d1): buildSearchResults переехал в features/search/build.js; XSS-тест
+// #5 теперь импортирует его напрямую оттуда (с state-аргументом).
+export { renderProfile, renderCityCard };
+// __setTestState заменяет состояние store для тестов (раньше — прямой присвоение
+// модульной переменной state). setState проходит через validate=applyInvariants,
+// что безопасно для чистых тестовых фикстур.
+export function __setTestState(s) { store.setState(s); }
 
 

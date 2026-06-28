@@ -7,8 +7,8 @@ import * as city from '@entities/city/index.js';
 import * as region from '@entities/region/index.js';
 import * as sight from '@entities/sight/index.js';
 import * as chronicle from '@lib/chronicle.js';
-import * as storage from '@lib/storage.js';
-import * as milestones from '@lib/milestones.js';
+import * as milestones from '@features/checklist/milestones.js';
+import * as appStore from '@app/store.js';
 
 describe('module exports (smoke на структуру)', () => {
   it('shared/lib/format: formatDateDisplay, getTodayLocal, normalizeForSearch, getPluralSights', () => {
@@ -46,11 +46,14 @@ describe('module exports (smoke на структуру)', () => {
   it('lib/chronicle: generateChronicle (без formatDateDisplay — переехал в shared/lib/format)', () => {
     expect(typeof chronicle.generateChronicle).toBe('function');
   });
-  it('lib/storage: STORAGE_KEY, getDefaultState, loadState, saveState', () => {
-    expect(storage.STORAGE_KEY).toBe('travelerPassport');
-    ['getDefaultState', 'loadState', 'saveState'].forEach(n => expect(typeof storage[n]).toBe('function'));
+  it('app/store: store, loadState, getDefaultState, STORAGE_KEY, applyInvariants, omitKey', () => {
+    expect(appStore.STORAGE_KEY).toBe('travelerPassport');
+    expect(typeof appStore.store.getState).toBe('function');
+    expect(typeof appStore.store.setState).toBe('function');
+    expect(typeof appStore.store.subscribe).toBe('function');
+    ['loadState', 'getDefaultState', 'applyInvariants', 'omitKey'].forEach(n => expect(typeof appStore[n]).toBe('function'));
   });
-  it('lib/milestones: addMilestone, removeMilestone, removeAllMilestones', () => {
+  it('features/checklist/milestones: addMilestone, removeMilestone, removeAllMilestones', () => {
     ['addMilestone', 'removeMilestone', 'removeAllMilestones']
       .forEach(n => expect(typeof milestones[n]).toBe('function'));
   });

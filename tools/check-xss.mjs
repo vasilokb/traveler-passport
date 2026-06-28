@@ -1,5 +1,7 @@
 // tools/check-xss.mjs
-// Best-effort XSS regression guard для src/app/main.js (или пути из argv[2]).
+// Best-effort XSS regression guard для HTML-генерирующих модулей: src/app/main.js
+// (рендеры виджетов до Phase D2) + feature-модули search/build.js и stamps/overlay.js
+// (переименованы из main.js в Phase D1). argv[2] — override одного файла.
 // Ищет потенциально небезопасные интерполяции в конструкциях:
 //   html += <expr>            ;   (присваивание-накопление HTML-строки)
 //   .innerHTML = <expr>       ;
@@ -249,14 +251,24 @@ function extractRhs(text, rhsStart, mode) {
 
 // --- Сканирование ---
 
-const src = await readFile(TARGET, 'utf8');
-const violations = [];
+// Файлы, генерирующие HTML-строки/записывающие innerHTML. По умолчанию — main.js
+// (рендеры виджетов до Phase D2) + feature-модули, переименованные из main.js в
+// Phase D1 (search/build.js, stamps/overlay.js). argv[2] — override одного файла
+// (обратная совместимость).
+const DEFAULT_TARGETS = [
+  path.join(ROOT, 'src/app/main.js'),
+  path.join(ROOT, 'src/features/search/build.js'),
+  path.join(ROOT, 'src/features/stamps/overlay.js'),
+];
 
-// Найти все позиции операторов.
+const TARGETS = process.argv[2] ? [path.resolve(process.argv[2])] : DEFAULT_TARGETS;
+
+const allViolations = [];
+
 const RE_ASSIGN = /(\bhtml\s*\+=|\.innerHTML\s*=)/g;
 const RE_CALL = /insertAdjacentHTML\s*\(/g;
 
-function processAssign(re, mode) {
+function processAssign(src, re, mode, targetPath, violations) {
   let m;
   re.lastIndex = 0;
   while ((m = re.exec(src)) !== null) {
@@ -267,6 +279,7 @@ function processAssign(re, mode) {
     gatherUnsafe(rhs, unsafe);
     if (unsafe.length) {
       violations.push({
+        file: path.relative(ROOT, targetPath).replace(/\\/g, '/'),
         line: lineNo,
         header: src.split('\n')[lineNo - 1].trim().slice(0, 90),
         findings: unsafe,
@@ -275,15 +288,11 @@ function processAssign(re, mode) {
   }
 }
 
-processAssign(RE_ASSIGN, 'assign');
-
-// insertAdjacentHTML: второй аргумент — после верхнеуровневой запятой.
-{
+function processInsertAdjacentHTML(src, targetPath, violations) {
   let m;
   RE_CALL.lastIndex = 0;
   while ((m = RE_CALL.exec(src)) !== null) {
     const openParen = m.index + m[0].length - 1; // позиция '('
-    // Найти верхнеуровневую запятую внутри аргументов.
     let i = openParen + 1, depth = 0, strCh = null, commaIdx = -1;
     while (i < src.length) {
       const c = src[i];
@@ -308,6 +317,7 @@ processAssign(RE_ASSIGN, 'assign');
     gatherUnsafe(rhs, unsafe);
     if (unsafe.length) {
       violations.push({
+        file: path.relative(ROOT, targetPath).replace(/\\/g, '/'),
         line: lineNo,
         header: src.split('\n')[lineNo - 1].trim().slice(0, 90),
         findings: unsafe,
@@ -316,10 +326,24 @@ processAssign(RE_ASSIGN, 'assign');
   }
 }
 
+for (const target of TARGETS) {
+  let src;
+  try {
+    src = await readFile(target, 'utf8');
+  } catch {
+    // Файла может не быть (напр. argv override) — пропускаем.
+    continue;
+  }
+  processAssign(src, RE_ASSIGN, 'assign', target, allViolations);
+  processInsertAdjacentHTML(src, target, allViolations);
+}
+
+const violations = allViolations;
+
 if (violations.length) {
-  console.error('check-xss: потенциально небезопасные интерполяции в ' + path.relative(ROOT, TARGET).replace(/\\/g, '/') + ':');
+  console.error('check-xss: потенциально небезопасные интерполяции:');
   for (const v of violations) {
-    console.error(`  L${v.line}: ${v.header}`);
+    console.error(`  ${v.file}:${v.line}: ${v.header}`);
     for (const f of v.findings) {
       console.error(`        → подозрительный операнд: ${f.slice(0, 100)}`);
     }
@@ -330,5 +354,5 @@ if (violations.length) {
   process.exit(1);
 }
 
-console.log('check-xss: OK — небезопасных интерполяций не найдено (' + path.relative(ROOT, TARGET).replace(/\\/g, '/') + ').');
+console.log('check-xss: OK — небезопасных интерполяций не найдено (' + TARGETS.map(t => path.relative(ROOT, t).replace(/\\/g, '/')).join(', ') + ').');
 process.exit(0);

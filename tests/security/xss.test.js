@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 // TODO(phase-d2): убрать временные экспорты render*/__setTestState из main.js.
 // После распила widgets/ эти функции переедут в modules и будут экспортироваться штатно.
 import {
-  renderProfile, renderCityCard, buildSearchResults, __setTestState,
+  renderProfile, renderCityCard, __setTestState,
 } from '../../src/app/main.js';
+// phase-d1: buildSearchResults переехал в features/search/build.js (pure, принимает state).
+import { buildSearchResults } from '../../src/features/search/build.js';
 
 function baseState(over) {
   return Object.assign({
@@ -97,8 +99,8 @@ describe('XSS-аудит render-функций main.js', () => {
   });
 
   it('#5 city.name в buildSearchResults — строка без живых тегов инжекта', () => {
-    __setTestState(baseState({ passportSearchQuery: '' }));
-    const html = buildSearchResults();
+    const state = baseState({ passportSearchQuery: '' });
+    const html = buildSearchResults(state);
     // Имена городов статичны и экранируются. Строка не должна содержать «живой» инъекции.
     expect(html).not.toContain('<script');
     expect(html).not.toContain('</script');

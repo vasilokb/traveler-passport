@@ -35,6 +35,14 @@ function layerOf(absPath) {
   return null;
 }
 
+// Имя feature (первый сегмент пути внутри features/) для данного файла.
+// 'features/visit/date-picker.js' → 'visit'. null — если файл не внутри features/.
+function featureNameOf(absPath) {
+  const rel = path.relative(SRC, absPath).replace(/\\/g, '/');
+  if (!rel.startsWith('features/')) return null;
+  return rel.slice('features/'.length).split('/')[0] || null;
+}
+
 // Резолв строки импорта в абсолютный путь (если это локальный модуль).
 function resolveImport(spec, fromFile) {
   // Bare-алиас
@@ -119,10 +127,53 @@ function allowed(from, to) {
   }
 }
 
+// Строгий проход ТОЛЬКО для features (Phase D1 §6).
+// layerOf() возвращает 'app' и для app/store.js, и для app/main.js — простой
+// `allowed('features','app')` пропустил бы features → app/main.js (запрещено FSD).
+// Поэтому проверяем features отдельно с явной допустимостью конкретного файла.
+// Допустимо: shared, entities, app/store.js (singleton), а также собственные
+// подмодули той же feature (intra-feature: features/visit/index.js → features/visit/date-picker.js).
+// Запрещено: features→features (ДРУГОЙ feature, напр. visit→checklist),
+//            features→widgets, features→lib, features→app/main.js (или любой
+//            другой app-файл кроме store.js).
+for (const file of files) {
+  const layer = layerOf(file);
+  if (layer !== 'features') continue;
+  const srcFeature = featureNameOf(file);
+  const src = await readFile(file, 'utf8');
+  let m;
+  IMPORT_RE.lastIndex = 0;
+  while ((m = IMPORT_RE.exec(src)) !== null) {
+    const spec = m[1];
+    const target = resolveImport(spec, file);
+    if (!target) continue; // npm-пакет
+    const targetLayer = layerOf(target);
+    if (!targetLayer) continue;
+    const targetRel = path.relative(SRC, target).replace(/\\/g, '/');
+
+    const allowedFeatures =
+      targetLayer === 'shared' ||
+      targetLayer === 'entities' ||
+      (targetLayer === 'app' && path.basename(target) === 'store.js') ||
+      (targetLayer === 'features' && srcFeature && featureNameOf(target) === srcFeature);
+
+    if (!allowedFeatures) {
+      violations.push({
+        file: path.relative(ROOT, file).replace(/\\/g, '/'),
+        spec,
+        from: 'features',
+        to: targetLayer,
+        target: targetRel,
+      });
+    }
+  }
+}
+
 if (violations.length) {
   console.error('check-imports: найдены нарушения направления импортов (FSD §0.1):');
   for (const v of violations) {
-    console.error(`  ${v.file}: "${v.spec}"  [${v.from} → ${v.to}]`);
+    const target = v.target ? ` → ${v.target}` : '';
+    console.error(`  ${v.file}: "${v.spec}"  [${v.from} → ${v.to}${target}]`);
   }
   console.error(`\nВсего нарушений: ${violations.length}`);
   process.exit(1);

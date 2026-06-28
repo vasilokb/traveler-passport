@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { CITIES } from '@entities/city/index.js';
 import { SIGHTS } from '@entities/sight/index.js';
-import { loadState, STORAGE_KEY } from '@lib/storage.js';
+import { loadState, STORAGE_KEY } from '@app/store.js';
 
-// Реальные данные из модулей Phase A/B (не выдуманные cityId) — гарантирует,
-// что валидация getCityById/CITIES/SIGHTS внутри loadState не отбросит фикстуры.
+// Реальные данные из модулей (не выдуманные cityId) — гарантирует, что валидация
+// getCityById/CITIES/SIGHTS внутри loadState не отбросит фикстуры.
 const checklistCity = CITIES.find(c => SIGHTS[c.id]);           // 'minsk', 4 достопримечательности
 const allSights = SIGHTS[checklistCity.id].map(s => s.id);       // ['s0','s1','s2','s3']
 const secondSightsCity = 'brest';                                // в SIGHTS (3), используется как silver
