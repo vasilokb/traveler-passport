@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateChronicle } from '@lib/chronicle.js';
+import { generateChronicle } from '@widgets/profile/chronicle.js';
 
 function st(over) {
   return Object.assign({ visitedCities: {}, milestones: [] }, over);

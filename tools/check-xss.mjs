@@ -251,12 +251,15 @@ function extractRhs(text, rhsStart, mode) {
 
 // --- Сканирование ---
 
-// Файлы, генерирующие HTML-строки/записывающие innerHTML. По умолчанию — main.js
-// (рендеры виджетов до Phase D2) + feature-модули, переименованные из main.js в
-// Phase D1 (search/build.js, stamps/overlay.js). argv[2] — override одного файла
-// (обратная совместимость).
+// Файлы, генерирующие HTML-строки/записывающие innerHTML. Phase D2: рендеры
+// переехали из src/app/main.js в widgets/ — сканер следует за ними. Сканится
+// каждый widget-рендерер + feature-модули search/build.js и stamps/overlay.js.
+// (main.js — теперь skeleton без HTML-генерации; map/onboarding не пишут innerHTML.)
+// argv[2] — override одного файла (обратная совместимость).
 const DEFAULT_TARGETS = [
-  path.join(ROOT, 'src/app/main.js'),
+  path.join(ROOT, 'src/widgets/profile/index.js'),
+  path.join(ROOT, 'src/widgets/city-card/index.js'),
+  path.join(ROOT, 'src/widgets/passport-list/index.js'),
   path.join(ROOT, 'src/features/search/build.js'),
   path.join(ROOT, 'src/features/stamps/overlay.js'),
 ];

@@ -74,7 +74,8 @@ describe('features/plan — togglePlanned', () => {
     expect(store.getState().plannedCities.slutsk).toBeUndefined();
     expect(hooks.saveNoteNow).toHaveBeenCalledWith('slutsk');
     expect(hooks.rerenderCityCard).toHaveBeenCalledWith('slutsk');
-    expect(hooks.updateMap).toHaveBeenCalled();
+    // Phase D2: hooks.updateMap удалён (subscribe widgets/map покрывает) — НЕ вызывается.
+    expect(hooks.updateMap).not.toHaveBeenCalled();
   });
 
   it('Непосещённый город → toggle добавляет в planned', () => {
@@ -84,7 +85,8 @@ describe('features/plan — togglePlanned', () => {
     api.togglePlanned('minsk');
 
     expect(store.getState().plannedCities.minsk).toBe(true);
-    expect(hooks.updateMap).toHaveBeenCalled();
+    // Phase D2: hooks.updateMap удалён (subscribe widgets/map покрывает) — НЕ вызывается.
+    expect(hooks.updateMap).not.toHaveBeenCalled();
   });
 
   it('Непосещённый город (повторный toggle) → удаляет из planned', () => {

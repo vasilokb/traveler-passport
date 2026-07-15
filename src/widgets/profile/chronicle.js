@@ -1,4 +1,3 @@
-// TODO(phase-d2): переезд в widgets/profile/chronicle.js
 import { getCityById } from '@entities/city/index.js';
 
 // formatDateDisplay НЕ определяется/реэкспортируется здесь — единственный источник

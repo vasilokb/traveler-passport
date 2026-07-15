@@ -6,7 +6,7 @@ import * as mapConfig from '@shared/config/map-config.js';
 import * as city from '@entities/city/index.js';
 import * as region from '@entities/region/index.js';
 import * as sight from '@entities/sight/index.js';
-import * as chronicle from '@lib/chronicle.js';
+import * as chronicle from '@widgets/profile/chronicle.js';
 import * as milestones from '@features/checklist/milestones.js';
 import * as appStore from '@app/store.js';
 
@@ -43,7 +43,7 @@ describe('module exports (smoke на структуру)', () => {
     expect(sight.SIGHTS.minsk).toBeDefined();
     expect(sight.SIGHTS.minsk.length).toBe(4);
   });
-  it('lib/chronicle: generateChronicle (без formatDateDisplay — переехал в shared/lib/format)', () => {
+  it('widgets/profile/chronicle: generateChronicle (без formatDateDisplay — в shared/lib/format)', () => {
     expect(typeof chronicle.generateChronicle).toBe('function');
   });
   it('app/store: store, loadState, getDefaultState, STORAGE_KEY, applyInvariants, omitKey', () => {

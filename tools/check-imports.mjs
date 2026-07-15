@@ -4,7 +4,7 @@
 //   entities → shared (НЕ entities→entities, НЕ lib, НЕ app)
 //   lib      → shared, entities
 //   app      → любой
-// Разрешение алиасов (@shared, @entities, @lib, @app) и относительных путей.
+// Разрешение алиасов (@shared, @entities, @features, @widgets, @app) и относительных путей.
 // Нарушение = exit 1.
 
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -20,7 +20,6 @@ const ALIASES = {
   '@features': path.join(SRC, 'features'),
   '@entities': path.join(SRC, 'entities'),
   '@shared': path.join(SRC, 'shared'),
-  '@lib': path.join(SRC, 'lib'),
 };
 
 // Категория слоя для файла. null = вне слоёв (например, сам tools/).
@@ -41,6 +40,14 @@ function featureNameOf(absPath) {
   const rel = path.relative(SRC, absPath).replace(/\\/g, '/');
   if (!rel.startsWith('features/')) return null;
   return rel.slice('features/'.length).split('/')[0] || null;
+}
+
+// Имя widget (первый сегмент пути внутри widgets/) для данного файла.
+// 'widgets/profile/chronicle.js' → 'profile'. null — если файл не внутри widgets/.
+function widgetNameOf(absPath) {
+  const rel = path.relative(SRC, absPath).replace(/\\/g, '/');
+  if (!rel.startsWith('widgets/')) return null;
+  return rel.slice('widgets/'.length).split('/')[0] || null;
 }
 
 // Резолв строки импорта в абсолютный путь (если это локальный модуль).
@@ -162,6 +169,48 @@ for (const file of files) {
         file: path.relative(ROOT, file).replace(/\\/g, '/'),
         spec,
         from: 'features',
+        to: targetLayer,
+        target: targetRel,
+      });
+    }
+  }
+}
+
+// Строгий проход ТОЛЬКО для widgets (Phase D2 §5).
+// layerOf() возвращает 'app' и для app/store.js, и для app/main.js — простой
+// `allowed('widgets','app')` пропустил бы widgets → app/main.js (запрещено FSD).
+// Допустимо: shared, entities, features, app/store.js (singleton), а также
+// собственные подмодули того же widget (intra-widget: widgets/profile/index.js
+// → widgets/profile/chronicle.js).
+// Запрещено: widgets→widgets (ДРУГОЙ widget, напр. passport-list→map),
+//            widgets→app/main.js (или любой app-файл кроме store.js), widgets→lib.
+for (const file of files) {
+  const layer = layerOf(file);
+  if (layer !== 'widgets') continue;
+  const srcWidget = widgetNameOf(file);
+  const src = await readFile(file, 'utf8');
+  let m;
+  IMPORT_RE.lastIndex = 0;
+  while ((m = IMPORT_RE.exec(src)) !== null) {
+    const spec = m[1];
+    const target = resolveImport(spec, file);
+    if (!target) continue; // npm-пакет
+    const targetLayer = layerOf(target);
+    if (!targetLayer) continue;
+    const targetRel = path.relative(SRC, target).replace(/\\/g, '/');
+
+    const allowedWidgets =
+      targetLayer === 'shared' ||
+      targetLayer === 'entities' ||
+      targetLayer === 'features' ||
+      (targetLayer === 'app' && path.basename(target) === 'store.js') ||
+      (targetLayer === 'widgets' && srcWidget && widgetNameOf(target) === srcWidget);
+
+    if (!allowedWidgets) {
+      violations.push({
+        file: path.relative(ROOT, file).replace(/\\/g, '/'),
+        spec,
+        from: 'widgets',
         to: targetLayer,
         target: targetRel,
       });

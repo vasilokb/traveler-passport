@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-// TODO(phase-d2): убрать временные экспорты render*/__setTestState из main.js.
-// После распила widgets/ эти функции переедут в modules и будут экспортироваться штатно.
-import {
-  renderProfile, renderCityCard, __setTestState,
-} from '../../src/app/main.js';
+// Phase D2: рендеры переехали из main.js в widgets/. __setTestState удалён —
+// тесты используют store.setState(s) напрямую (он применяет applyInvariants,
+// что безопасно для чистых тестовых фикстур).
+import { renderProfile } from '../../src/widgets/profile/index.js';
+import { renderCityCard } from '../../src/widgets/city-card/index.js';
+import { store } from '../../src/app/store.js';
 // phase-d1: buildSearchResults переехал в features/search/build.js (pure, принимает state).
 import { buildSearchResults } from '../../src/features/search/build.js';
 
@@ -35,7 +36,7 @@ function assertNoLiveDanger(root) {
   });
 }
 
-describe('XSS-аудит render-функций main.js', () => {
+describe('XSS-аудит render-функций widgets/', () => {
   beforeEach(() => {
     document.body.innerHTML =
       '<div id="tab-profile"></div>' +
@@ -44,7 +45,7 @@ describe('XSS-аудит render-функций main.js', () => {
 
   it('#1 travelerName в renderProfile — рендерится как текст, не как элементы', () => {
     const payload = '<img src=x onerror=alert(1)>';
-    __setTestState(baseState({ travelerName: payload }));
+    store.setState(baseState({ travelerName: payload }));
     renderProfile();
     const root = document.getElementById('tab-profile');
     const nameSpan = root.querySelector('.profile-name-text');
@@ -57,7 +58,7 @@ describe('XSS-аудит render-функций main.js', () => {
   });
 
   it('#2 city.name/description в renderCityCard — статичные данные, инжекта нет', () => {
-    __setTestState(baseState({
+    store.setState(baseState({
       visitedCities: { minsk: { date: '2025-01-01' } },
     }));
     renderCityCard('minsk');
@@ -69,7 +70,7 @@ describe('XSS-аудит render-функций main.js', () => {
 
   it('#3 cityNotes в renderCityCard — textarea.value = текст, breakout невозможен', () => {
     const payload = '</textarea><img src=x onerror=alert(1)>';
-    __setTestState(baseState({
+    store.setState(baseState({
       visitedCities: { minsk: { date: '2025-01-01' } },
       cityNotes: { minsk: payload },
     }));
@@ -83,7 +84,7 @@ describe('XSS-аудит render-функций main.js', () => {
   });
 
   it('#4 chronicle entries (milestones + visited) в renderProfile — экранированы', () => {
-    __setTestState(baseState({
+    store.setState(baseState({
       visitedCities: { minsk: { date: '2025-06-01' } },
       milestones: [{ cityId: 'minsk', date: '2025-06-01', tier: 'silver' }],
     }));

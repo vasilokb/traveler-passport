@@ -50,7 +50,8 @@ describe('features/checklist — toggleSight', () => {
     expect(s.milestones).toEqual([
       expect.objectContaining({ cityId: 'minsk', tier: 'silver' }),
     ]);
-    expect(hooks.updateMap).toHaveBeenCalled();
+    // Phase D2: hooks.updateMap удалён (subscribe widgets/map покрывает) — НЕ вызывается.
+    expect(hooks.updateMap).not.toHaveBeenCalled();
     // tier изменился → rerenderCityCard
     expect(hooks.rerenderCityCard).toHaveBeenCalledWith('minsk');
     expect(hooks.patchChecklist).not.toHaveBeenCalled();
@@ -67,7 +68,8 @@ describe('features/checklist — toggleSight', () => {
 
     expect(hooks.patchChecklist).toHaveBeenCalledWith('minsk', MS[1]);
     expect(hooks.rerenderCityCard).not.toHaveBeenCalled();
-    expect(hooks.updateMap).toHaveBeenCalled();
+    // Phase D2: hooks.updateMap удалён (subscribe widgets/map покрывает) — НЕ вызывается.
+    expect(hooks.updateMap).not.toHaveBeenCalled();
     expect(store.getState().checkedSights.minsk).toEqual([MS[0], MS[1]]);
   });
 

@@ -62,7 +62,7 @@ export function initChecklist(_store, hooks) {
     // применит инварианты #1 (Gold ∉ planned) и #2 (Silver ∈ planned) автоматически.
     store.setState(nextState);
 
-    hooks.updateMap();
+    // hooks.updateMap() удалён (Phase D2 §3): subscribe widgets/map покрывает.
 
     if (oldTier === newTier) {
       hooks.patchChecklist(cityId, sightId);

@@ -26,7 +26,7 @@ export function initVisit(_store, hooks) {
     // Silver-инвариант (#2) применится автоматически в applyInvariants.
     closeDatePicker();
     hooks.rerenderCityCard(cityId);
-    hooks.updateMap();
+    // hooks.updateMap() удалён (Phase D2 §3): subscribe widgets/map покрывает.
     // Bugfix D-1 (§17): подключаем stamp-overlay к confirmVisit.
     hooks.showStampOverlay(cityId);
   }
@@ -43,8 +43,8 @@ export function initVisit(_store, hooks) {
     });
     hooks.closeCityCard();
 
-    if (store.getState().currentTab === "profile") hooks.renderProfile();
-    hooks.updateMap();
+    // hooks.renderProfile()/hooks.updateMap() удалены (Phase D2 §3): subscribe
+    // widgets/profile (if currentTab==='profile') + widgets/map покрывают.
   }
 
   return {

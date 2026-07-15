@@ -44,7 +44,8 @@ describe('features/visit', () => {
       expect(document.getElementById('date-picker-modal').style.display).toBe('none');
       expect(hooks.showStampOverlay).toHaveBeenCalledWith('minsk');
       expect(hooks.rerenderCityCard).toHaveBeenCalledWith('minsk');
-      expect(hooks.updateMap).toHaveBeenCalled();
+      // Phase D2: hooks.updateMap удалён (subscribe widgets/map покрывает) — НЕ вызывается.
+      expect(hooks.updateMap).not.toHaveBeenCalled();
       expect(hooks.saveNoteNow).toHaveBeenCalledWith('minsk');
     });
 
@@ -83,7 +84,8 @@ describe('features/visit', () => {
       expect(s.plannedCities.minsk).toBeUndefined();
       expect(s.milestones).toEqual([]);
       expect(hooks.closeCityCard).toHaveBeenCalled();
-      expect(hooks.updateMap).toHaveBeenCalled();
+      // Phase D2: hooks.updateMap удалён (subscribe widgets/map покрывает) — НЕ вызывается.
+      expect(hooks.updateMap).not.toHaveBeenCalled();
     });
 
     it('milestones других городов сохраняются', () => {
@@ -106,23 +108,16 @@ describe('features/visit', () => {
       ]);
     });
 
-    it('currentTab === "profile" → вызывает renderProfile', () => {
+    // Phase D2: features больше НЕ вызывают renderProfile напрямую — re-render
+    // профиля покрывается subscribe widgets/profile. Hook не должен вызываться.
+    it('removeVisit НЕ вызывает renderProfile напрямую (subscribe покрывает)', () => {
       store.setState({
         currentTab: 'profile',
         visitedCities: { minsk: { date: '2025-01-15' } },
       });
       const api = initVisit(store, hooks);
       api.removeVisit('minsk');
-      expect(hooks.renderProfile).toHaveBeenCalled();
-    });
-
-    it('currentTab !== "profile" → renderProfile НЕ вызывается', () => {
-      store.setState({
-        currentTab: 'passport',
-        visitedCities: { minsk: { date: '2025-01-15' } },
-      });
-      const api = initVisit(store, hooks);
-      api.removeVisit('minsk');
+      expect(store.getState().visitedCities.minsk).toBeUndefined();
       expect(hooks.renderProfile).not.toHaveBeenCalled();
     });
 

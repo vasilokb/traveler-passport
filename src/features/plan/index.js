@@ -46,7 +46,7 @@ export function initPlan(_store, hooks) {
     // недостижимо (Gold ∉ plannedCities), для visited-no-sights безвредно (§17).
     hooks.saveNoteNow(cityId);
     hooks.rerenderCityCard(cityId);
-    hooks.updateMap();
+    // hooks.updateMap() удалён (Phase D2 §3): subscribe widgets/map покрывает.
   }
 
   return {
